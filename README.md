@@ -1,5 +1,5 @@
 # claritynlp-nova
-Basic version of ClarityNLP that runs without Docker.
+This is a basic version of ClarityNLP that runs without Docker.
 
 # Setup and Installation
 
