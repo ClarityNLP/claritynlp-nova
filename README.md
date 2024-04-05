@@ -1,4 +1,4 @@
-# clarity_grady
+# claritynlp-nova
 Basic version of ClarityNLP that runs without Docker.
 
 # Setup and Installation
