@@ -132,6 +132,8 @@ fhir_terminology_user_name = read_property('FHIR_TERMINOLOGY_USER_NAME', ('local
 fhir_terminology_user_password = read_property('FHIR_TERMINOLOGY_USER_PASSWORD', ('local', 'fhir_terminology_password'),
                                                key_name='fhir_terminology_user_password')
 
+llm_api_url = read_property("LLM_API_URL", ("local", "llm_api_url"), key_name="llm_api_url")
+
 # TODO this out a bit more, this is more for experimental evaluation
 cache_counts = {
     'compute': 0,

@@ -40,7 +40,7 @@ Install a Spacy pretrained model file:
 
 Install a few other model files:
 
-    cd clarity_grady/nlp
+    cd nlp
     python install_models.py
 
 Do the setup steps for Postgres and Solr on this page:
@@ -52,4 +52,4 @@ Then follow the instructions in the `Running Locally without Docker` test on tha
 
 
 
-    
+
