@@ -1,6 +1,6 @@
-spacy==3.5.0
-pydantic==1.10.11
-typing-extensions==4.7.1
+spacy==3.7.3
+pydantic==2.7.0
+typing-extensions==4.11.0
 nltk
 antlr4-python3-runtime
 flask
@@ -10,7 +10,7 @@ pymongo
 psycopg2
 pytest
 sly
-inflect==5.6.2
+inflect==7.0.0
 pandas
 cachetools
 simplejson
