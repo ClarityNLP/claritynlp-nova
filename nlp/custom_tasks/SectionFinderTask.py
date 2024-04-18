@@ -50,8 +50,11 @@ class SectionFinderTask(BaseTask):
 
         # user specifies desired sections in a single string
         # items are comma-separated, can contain concept hierarchy codes or section names
-        section_string = self.pipeline_config.custom_arguments['section_list']
-        items = section_string.split(',')
+        section_string = str(self.pipeline_config.custom_arguments['section_list'])
+        if ',' in section_string:
+            items = section_string.split(',')
+        else:
+            items = [section_string]
         section_list = [item.strip().lower() for item in items]
         
         #for s in section_list:
