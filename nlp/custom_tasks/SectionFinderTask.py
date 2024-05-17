@@ -51,15 +51,38 @@ class SectionFinderTask(BaseTask):
         # user specifies desired sections in a single string
         # items are comma-separated, can contain concept hierarchy codes or section names
         section_string = str(self.pipeline_config.custom_arguments['section_list'])
+        #log('*** SECTION STRING: "{0}" ***'.format(section_string))
+        
         if ',' in section_string:
             items = section_string.split(',')
         else:
             items = [section_string]
         section_list = [item.strip().lower() for item in items]
+
+        # Section numbers such as "6.40" can be interpreted as floating point.
+        # The front end will strip the trailing zero from all such numbers.
+        # Restore the trailing zero here.
+
+        new_section_list = []
+        for s in section_list:
+            replacement = s
+            # find all section numbers interpretable as floats
+            match = re.match(r'^[.\d]+$', s, re.IGNORECASE)
+            if match:
+                # check if ends with single digit (ignore single-digit section headers such as "6")
+                match2 = re.search(r'(?<=\d)\.(?P<end_digits>\d)$', s, re.IGNORECASE)
+                if match2:
+                    end_digits = match2.group('end_digits')
+                    if 1 == len(end_digits):
+                        #log('*** SectionFinderTask: appending trailing zero to section "{0}" ***'.format(s))
+                        replacement = s + '0'
+
+            new_section_list.append(replacement)
+
+        assert len(new_section_list) == len(section_list)
+        section_list = new_section_list
+        log('*** SectionFinderTask: section_list = "{0}" ***'.format(section_list))
         
-        #for s in section_list:
-        #    log('next section from list: "{0}"'.format(s))
-            
         # for each document...
         for i, doc in enumerate(self.docs):
 
@@ -76,7 +99,7 @@ class SectionFinderTask(BaseTask):
                 for s in section_list:
                     if s in next_header:
                         
-                        #log('*** DOC {0} CONTAINS SECTION "{1}: {2}" ***'.format(i, next_header, next_text[:64]))
+                        #log('*** DOC {0}: SECTION "{1}" IN "{2}"'.format(i, s, next_header))
 
                         obj = {
                             'section_header' : next_header,
