@@ -24,7 +24,7 @@ import pkg_resources
 SCRIPT_DIR = os.path.dirname(__file__)
 
 SEC_TAG_VERSION_MAJOR = 1
-SEC_TAG_VERSION_MINOR = 2
+SEC_TAG_VERSION_MINOR = 3
 
 # set to True to trace ambiguity resolution process, False otherwise
 TRACE = False
@@ -610,6 +610,19 @@ def resolve_ambiguities(candidate_headers, stack):
                             format(candidate_headers[best_candidates[indices_of_shortest[0]]].concept), DEBUG)
             return candidate_headers[best_candidates[indices_of_shortest[0]]]
         else:
+            if all_same_length and 2 == len(best_candidates):
+                # prefer GENERAL_EXAM to GENERAL_REVIEW if only these two concepts present
+                ch0 = candidate_headers[best_candidates[0]].concept
+                ch1 = candidate_headers[best_candidates[1]].concept
+                if 'GENERAL_REVIEW' == ch0 and 'GENERAL_EXAM' == ch1:
+                    if TRACE:
+                        log("\tChoosing GENERAL_EXAM instead of GENERAL_REVIEW (1)")
+                    return candidate_headers[best_candidates[1]]
+                elif 'GENERAL_EXAM' == ch0 and 'GENERAL_REVIEW' == ch1:
+                    if TRACE:
+                        log("\tChoosing GENERAL_EXAM instead of GENERAL_REVIEW (2)")
+                    return candidate_headers[best_candidates[0]]
+                    
             # still no clear winner, take the first of the best candidates
             if TRACE:
                 log("\tNo clear winner, choosing: {0}".format(candidate_headers[best_candidates[0]].concept), DEBUG)
