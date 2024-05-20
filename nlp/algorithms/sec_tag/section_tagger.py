@@ -995,6 +995,7 @@ def process_report(report):
             
             if TRACE:
                 log("\tRESOLVED: {0}".format(header.concept), DEBUG);
+                log("")
 
         if 0 == header_count:
             # no matches for this sentence, so concatenate to previous
