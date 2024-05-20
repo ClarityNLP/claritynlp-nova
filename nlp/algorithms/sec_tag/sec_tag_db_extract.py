@@ -43,7 +43,12 @@ from concept_graph import DuplicateNodeException
 from concept_graph import NodeNotFoundException
 from concept_graph import ConceptGraph
 from concept_graph import Node
-from claritynlp_logging import log, ERROR, DEBUG
+
+if __name__ == '__main__':
+    DISPLAY = print
+else:
+    from claritynlp_logging import log, ERROR, DEBUG
+    DISPLAY = log
 
 # name of file mapping concept names to synonyms
 CS_FILENAME = os.path.join(os.getcwd(), 'data', 'concepts_and_synonyms.txt')
@@ -77,8 +82,8 @@ def extract_synonyms(conn):
     try:
         cursor.execute(query)
     except Exception as ex:
-        log("extract_synonyms: could not execute query...", ERROR)
-        log(ex, ERROR)
+        DISPLAY("extract_synonyms: could not execute query...", ERROR)
+        DISPLAY(ex, ERROR)
         cursor.close()
         conn.close()
         sys.exit(-1)
@@ -118,7 +123,7 @@ def extract_synonyms(conn):
 
         results.append(result)
             
-    log("extract_synonyms: query returned {0} rows.".format(cursor.rowcount))
+    DISPLAY("extract_synonyms: query returned {0} rows.".format(cursor.rowcount))
 
     # write to output file
     outfile = open(CS_FILENAME, 'wt')
@@ -526,16 +531,22 @@ def extract_synonyms(conn):
     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(372, 'oncology_family_history', 6920, 'oncology hx', 'PT'))
     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(372, 'oncology_family_history', 6921, 'onc hx', 'PT'))
 
-    # synonyms for chest_xray
+    # synonyms for 'chest_xray'
     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(839, 'chest_xray', 6930, 'chest pa and lateral', 'PT'))
     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(839, 'chest_xray', 6931, 'chest pa, and lateral', 'PT'))
     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(839, 'chest_xray', 6932, 'chest pa and lateral', 'PT'))
     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(839, 'chest_xray', 6933, 'chest pa lateral', 'PT'))
     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(839, 'chest_xray', 6934, 'pa and lateral', 'PT'))
 
-    # synonyms for sleep habits
+    # synonyms for 'sleep habits'
     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(308, 'sleep_habits', 6940, 'sleep habits', 'PT'))
     outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(308, 'sleep_habits', 6941, 'sleep_habits', 'KM'))
+
+    # synonyms for 'external eye exam'
+    outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(593, 'external_eye_exam', 6950, 'eyes', 'PT'))
+
+    # synonyms for 'external ear'
+    outfile.write("{0}\t{1}\t{2}\t{3}\t{4}\n".format(616, 'external_ear', 6960, 'ears', 'PT'))
     
     outfile.close()
     cursor.close()
@@ -562,7 +573,7 @@ def extract_tree(conn):
         try:
             cursor.execute(query)
         except:
-            log("extract_tree: could not execute query...")
+            DISPLAY("extract_tree: could not execute query...")
             cursor.close()
             conn.close()
             sys.exit(-1)
@@ -599,7 +610,7 @@ def extract_tree(conn):
             if len(tree_code) > 0:
                 maps[level][tree_code] = (cid, concept_name)
 
-        log("extract_tree: query for level {0} returned {1} rows.".format(level, cursor.rowcount))
+        DISPLAY("extract_tree: query for level {0} returned {1} rows.".format(level, cursor.rowcount))
 
         # Concept 2921 'preoperative_medications' is missing a treecode, but
         # the concept 441 'postoperative_medications' has treecode 5.37.106.127
@@ -663,7 +674,7 @@ def extract_tree(conn):
     # # level in [7, 6, ..., 1, 0]
     # for level in reversed(range(0, 8)):
 
-    #     log("CURRENT LEVEL: {0}".format(level))
+    #     DISPLAY("CURRENT LEVEL: {0}".format(level))
         
     #     # for each entry in the map at this level
     #     for key in maps[level].keys():
@@ -673,7 +684,7 @@ def extract_tree(conn):
     #         while l >= 0:
     #             concept_name = maps[l][tree_code]
     #             indent = '    ' * (7 - l)
-    #             log("{0}{1}".format(indent, concept_name))
+    #             DISPLAY("{0}{1}".format(indent, concept_name))
 
     #             # up one level for the next iteration
     #             l -= 1
@@ -702,7 +713,7 @@ def extract_tree(conn):
             node = Node(cid, level, concept_name, treecode)
             graph.add_node(node)
 
-    log("Concept graph node count: {0}".format(graph.size()))
+    DISPLAY("Concept graph node count: {0}".format(graph.size()))
 
     # stage 2: add child => parent and child <= parent links, work bottom-up
     for level in reversed(range(1, 8)): # [7, 6, 5, 4, 3, 2, 1] NOT 0
@@ -717,21 +728,21 @@ def extract_tree(conn):
     graph.validate(db_extra)
             
     # ancestor_node_indices = graph.all_ancestors(846)
-    # log("ancestor cids of node(cid == 846): ")
+    # DISPLAY("ancestor cids of node(cid == 846): ")
     # for a in ancestor_node_indices:
-    #     log("{0}, ".format(graph.nodes[a].cid), end="")
-    # log()
+    #     DISPLAY("{0}, ".format(graph.nodes[a].cid), end="")
+    # DISPLAY()
 
     # descendant_node_indices = graph.all_descendants(63)
-    # log("descendant cids of node(cid == 63): count: {0}".format(len(descendant_node_indices)))
+    # DISPLAY("descendant cids of node(cid == 63): count: {0}".format(len(descendant_node_indices)))
     # for d in descendant_node_indices:
-    #     log("{0}, ".format(graph.nodes[d].cid), end="")
-    # log()
+    #     DISPLAY("{0}, ".format(graph.nodes[d].cid), end="")
+    # DISPLAY()
 
     # for i in range(1, 28):
     #     cid = maps[0][str(i)][0]
     #     descendants = graph.all_descendants(cid)
-    #     log("{0}.* has {1} descendants.".format(i, len(descendants)))
+    #     DISPLAY("{0}.* has {1} descendants.".format(i, len(descendants)))
     
     graph.dump_to_file(GRAPH_FILENAME)
     graph.dump_ancestor_cids_to_file(ANCESTOR_FILENAME)
@@ -748,15 +759,15 @@ try:
                            user = 'sectag',
                            passwd = 'sectag')
     
-    log("Connected to SecTag_Terminology database.")
+    DISPLAY("Connected to SecTag_Terminology database.")
     
 except:
-    log("Cannot connect to MySQL server...")
+    DISPLAY("Cannot connect to MySQL server...")
     sys.exit(-1)
 
 extract_synonyms(conn)
 extract_tree(conn)
 
 conn.close()
-log("Disconnected")
+DISPLAY("Disconnected")
 
