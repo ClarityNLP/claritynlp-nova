@@ -5996,3 +5996,5 @@ cid,concept_name,synonym_id,synonym_name,synonym_type
 839	chest_xray	6934	pa and lateral	PT
 308	sleep_habits	6940	sleep habits	PT
 308	sleep_habits	6941	sleep_habits	KM
+593	external_eye_exam	6950	eyes	PT
+616	external_ear	6960	ears	PT
