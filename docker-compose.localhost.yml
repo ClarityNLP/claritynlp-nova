@@ -1,0 +1,86 @@
+networks:
+  clarity:
+    driver: bridge
+
+volumes:
+  nlp-mongodata:
+  nlp-api-data:
+  nlp-pgdata:
+
+services:
+  nlp-api:
+    build:
+      context: ./nlp
+      dockerfile: Dockerfile
+    restart: always
+    container_name: NLP_API
+    hostname: nlp-api
+    volumes:
+      - nlp-api-data:/tmp
+    ports:
+      - "8080:8080"
+    command: gunicorn api --config config.py --timeout 500 -b :8080
+    environment:
+      - NLP_API_LOG_DIR=/tmp
+      - NLP_API_TMP_DIR=/tmp
+      - NLP_API_URL=localhost:8080
+      - NLP_EXPRESSION_EVALUATOR=mongo
+      - NLP_MONGO_CONTAINER_PORT=8162
+      - NLP_MONGO_DATABASE=nlp
+      - NLP_MONGO_HOSTNAME=localhost
+      - NLP_MONGO_PASSWORD=password
+      - NLP_MONGO_USERNAME=admin
+      - NLP_MONGO_WORKING_COLLECTION=pipeline_temp
+      - NLP_MONGO_WORKING_INDEX=job_id
+      - NLP_PG_CONTAINER_PORT=5432
+      - NLP_PG_DATABASE=claritynlp
+      - NLP_PG_HOSTNAME=<Add-Your-Hostname-Here>
+      - NLP_PG_PASSWORD=password
+      - NLP_PG_USER=admin
+      - OHDSI_WEBAPI_URL=http://api.ohdsi.org/WebAPI
+      - USE_MEMORY_CACHING=false
+      - USE_PRECOMPUTED_SEGMENTATION=false
+      - USE_REDIS_CACHING=false
+      - USE_REORDERED_NLPQL=false
+    networks:
+      - clarity
+    depends_on:
+      - nlp-mongo
+
+  nlp-mongo:
+    build: 
+      context: ./utilities/nlp-mongo
+      dockerfile: Dockerfile.prod
+    container_name: NLP_MONGO
+    hostname: nlp-mongo
+    ports: 
+      - "27017:27017" 
+    volumes:
+      - nlp-mongodata:/data/db
+    environment:
+      - MONGO_DATA_DIR=/data/db
+      - MONGO_LOG_DIR=/dev/null
+      - MONGO_INITDB_DATABASE=nlp
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    networks:
+      - clarity
+
+  nlp-postgres:
+    build: 
+        context: ./utilities/nlp-postgres
+        dockerfile: Dockerfile.txt
+    container_name: NLP_POSTGRES
+    hostname: nlp-pg
+    command: postgres -c 'shared_buffers=512MB' -c 'max_connections=500'
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=clarity
+      - INIT_OMOP=false
+    ports: 
+      - "5432:5432"
+    volumes:
+      - nlp-pgdata:/var/lib/postgresql/data/
+    networks:
+      - clarity
