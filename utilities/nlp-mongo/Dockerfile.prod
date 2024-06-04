@@ -1,0 +1,8 @@
+FROM mongo:4.0.27
+
+COPY setup.js $APP_HOME
+COPY users.sh $APP_HOME
+
+
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["mongod"]

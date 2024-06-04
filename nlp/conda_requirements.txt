@@ -1,0 +1,17 @@
+spacy==3.7.3
+pydantic==2.7.0
+typing-extensions==4.11.0
+nltk
+antlr4-python3-runtime
+flask
+flask-cors
+luigi
+pymongo
+psycopg2
+pytest
+sly
+inflect==7.0.0
+pandas
+cachetools
+simplejson
+hypercorn
