@@ -19,7 +19,7 @@ services:
       - nlp-api-data:/tmp
     ports:
       - "8080:8080"
-    command: gunicorn api --config config.py --timeout 500 -b :8080
+    command: hypercorn api:application --config hypercorn_config.toml -b :8080
     environment:
       - NLP_API_LOG_DIR=/tmp
       - NLP_API_TMP_DIR=/tmp

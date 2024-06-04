@@ -14,4 +14,4 @@ inflect==7.0.0
 pandas
 cachetools
 simplejson
-gunicorn
+hypercorn

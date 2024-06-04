@@ -28,4 +28,4 @@ RUN python3 install_models.py
 
 COPY . .
 ENV PATH /opt/conda/envs/claritynlp/bin:$PATH
-CMD ["gunicorn", "api", "--config", "config.py", "-b", "$NLP_API_CONTAINER_PORT"]
+CMD ["hypercorn", "api:application", "--config", "hypercorn_config.toml", "-b", "$NLP_API_CONTAINER_PORT"]
