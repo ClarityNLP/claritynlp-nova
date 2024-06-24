@@ -12,7 +12,7 @@ services:
     build:
       context: ./nlp
       dockerfile: Dockerfile
-    restart: always
+    # restart: always
     container_name: NLP_API
     hostname: nlp-api
     volumes:
@@ -25,16 +25,16 @@ services:
       - NLP_API_TMP_DIR=/tmp
       - NLP_API_URL=localhost:8080
       - NLP_EXPRESSION_EVALUATOR=mongo
-      - NLP_MONGO_CONTAINER_PORT=8162
+      - NLP_MONGO_CONTAINER_PORT=27017
       - NLP_MONGO_DATABASE=nlp
-      - NLP_MONGO_HOSTNAME=localhost
+      - NLP_MONGO_HOSTNAME=nlp-mongo
       - NLP_MONGO_PASSWORD=password
       - NLP_MONGO_USERNAME=admin
       - NLP_MONGO_WORKING_COLLECTION=pipeline_temp
       - NLP_MONGO_WORKING_INDEX=job_id
       - NLP_PG_CONTAINER_PORT=5432
-      - NLP_PG_DATABASE=claritynlp
-      - NLP_PG_HOSTNAME=<Add-Your-Hostname-Here>
+      - NLP_PG_DATABASE=clarity
+      - NLP_PG_HOSTNAME=nlp-pg
       - NLP_PG_PASSWORD=password
       - NLP_PG_USER=admin
       - OHDSI_WEBAPI_URL=http://api.ohdsi.org/WebAPI
@@ -46,6 +46,25 @@ services:
       - clarity
     depends_on:
       - nlp-mongo
+
+  nlp-postgres:
+    build: 
+        context: ./utilities/nlp-postgres
+        dockerfile: Dockerfile.txt
+    container_name: NLP_POSTGRES
+    hostname: nlp-pg
+    command: postgres -c 'shared_buffers=512MB' -c 'max_connections=500'
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=clarity
+      - INIT_OMOP=false
+    ports: 
+      - "5432:5432"
+    volumes:
+      - nlp-pgdata:/var/lib/postgresql/data/
+    networks:
+      - clarity
 
   nlp-mongo:
     build: 
@@ -66,21 +85,21 @@ services:
     networks:
       - clarity
 
-  nlp-postgres:
+
+  nlpaas: 
     build: 
-        context: ./utilities/nlp-postgres
-        dockerfile: Dockerfile.txt
-    container_name: NLP_POSTGRES
-    hostname: nlp-pg
-    command: postgres -c 'shared_buffers=512MB' -c 'max_connections=500'
-    environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=clarity
-      - INIT_OMOP=false
+        context: ./utilities/nlpaas
+        dockerfile: Dockerfile
+    container_name: nlpaas
+    hostname: nlpaas
+    # image: claritynlp/nlpaas:lite
     ports: 
-      - "5432:5432"
-    volumes:
-      - nlp-pgdata:/var/lib/postgresql/data/
-    networks:
+      - "8081:8080"
+    environment: 
+      - CLARITY_NLP_API_URL=http://NLP_API:8080/
+      - LOG_LEVEL=DEBUG
+      - NUM_WORKERS=8
+      - DEPLOY_URL=http://localhost:8081/
+      - CLEAR_RESULTS=true
+    networks: 
       - clarity

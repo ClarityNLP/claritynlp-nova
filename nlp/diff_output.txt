@@ -1,0 +1,389 @@
+diff --git a/nlp/luigi_module.py b/nlp/luigi_module.py
+index f8b0b45..a73cc0e 100644
+--- a/nlp/luigi_module.py
++++ b/nlp/luigi_module.py
+@@ -7,7 +7,7 @@ from pymongo.errors import BulkWriteError
+ import data_access
+ from ilock import ILock, ILockException
+ from data_access import pipeline_config as config
+-from data_access import solr_data, phenotype_stats
++from data_access import solr_data, filesystem_data, memory_data, phenotype_stats
+ from data_access import update_phenotype_model
+ from data_access import tuple_processor
+ from luigi_tools import phenotype_helper
+@@ -17,7 +17,6 @@ from claritynlp_logging import log, ERROR, DEBUG
+ import util
+ import threading
+ import multiprocessing
+-from time import sleep
+ from queue import Queue, Empty
+ 
+ 
+@@ -43,34 +42,14 @@ _TERMINATE_WORKERS = None
+ 
+ log('luigi_module: {0} CPUs, {1} workers'.format(_cpu_count, _worker_count))
+ 
+-# variables for atomic access to PipelineTask completion
+-_lock = threading.Lock()
+-_counter = 0
+-
+-def _initialize_counter(value):
+-    global _counter
+-    _counter = value
+-
+-def _atomic_increment_counter():
+-    global _counter
+-    with _lock:
+-        _counter += 1
+-
+-def _atomic_read_counter():
+-    with _lock:
+-        value = _counter
+-
+-    return value
+-
+-
+ # function for parallel execution of the PipelineTask objects of each PhenotypeTask
+-def _worker_pipelines_in_parallel(queue, worker_id):
++def _worker(queue, worker_id):
+     """
+     Continually check the queue for work items; terminate if None appears.
+     Work items must implement a run() function.
+     """
+     
+-    log('luigi_module: pipeline worker {0} running...'.format(worker_id))
++    log('luigi_module: worker {0} running...'.format(worker_id))
+     while True:
+         try:
+             item = queue.get(timeout = 2)
+@@ -83,38 +62,15 @@ def _worker_pipelines_in_parallel(queue, worker_id):
+             # now exit this worker thread
+             break
+         else:
+-            # run the pipeline task
+-            log('luigi_module: pipeline worker {0} now running {1}'.format(worker_id, item))
++            # run it
++            log('luigi_module: worker {0} now running {1}'.format(worker_id, item))
+             # run pipeline batch tasks
+-            item.run_batches_serially()
++            item.run()
+             # run collector
+             item.run_collector_pipeline()
+     log('luigi_module: worker {0} exiting...'.format(worker_id))
+ 
+ 
+-def _worker_batches_in_parallel(queue, worker_id):
+-    """
+-    """
+-
+-    log('luigi_module: batch worker {0} running...'.format(worker_id))
+-    while True:
+-        try:
+-            item = queue.get(timeout = 2)
+-        except Empty:
+-            # haven't seen termination signal yet
+-            log('luigi_module: batch worker {0} saw empty queue'.format(worker_id))
+-            continue
+-        if item is _TERMINATE_WORKERS:
+-            # replace so that other workers will know to terminate
+-            queue.put(item)
+-            # exit this worker thread
+-            break
+-        else:
+-            # run the pipeline batch task
+-            log('luigi module: batch worker {0} now running {1}'.format(worker_id, item))
+-            item.run()
+-    log('luigi_module: batch worker {0} exiting...'.format(worker_id))
+-
+ # These variables are used to control locking of the Mongo database,
+ # to force writes to disk.
+ 
+@@ -148,7 +104,7 @@ class PhenotypeTask(): #luigi.Task):
+         phenotype_config['phenotype_id'] = int(self.phenotype)
+ 
+         log("getting ready to execute pipelines...")
+-        log('pipeline_ids: {0}'.format(pipeline_ids))        
++        log('pipeline_ids: {0}'.format(pipeline_ids))
+         if len(pipeline_ids) > 0:
+             configs = dict()
+             for pipeline_id in pipeline_ids:
+@@ -169,15 +125,13 @@ class PhenotypeTask(): #luigi.Task):
+     def run_pipelines_in_parallel(self):
+         """
+         Parallel execution of the PipelineTask objects in self.pipeline_tasks.
+-        The task batches in each PipelineTask object execute serially.
+         """
+ 
+         task_queue = Queue()
+         
+         # create and start the worker threads
+         log('luigi_module: creating {0} worker threads'.format(_worker_count))        
+-        workers = [threading.Thread(target=_worker_pipelines_in_parallel,
+-                                    args=(task_queue, i)) for i in range(_worker_count)]
++        workers = [threading.Thread(target=_worker, args=(task_queue, i)) for i in range(_worker_count)]
+         for worker in workers:
+             worker.start()
+         
+@@ -191,75 +145,13 @@ class PhenotypeTask(): #luigi.Task):
+ 
+         self.pipelines_finished = True
+         
+-
+-    def run_batches_in_parallel(self):
+-        """
+-        Parallel execution of all task batches across all PipelineTask objects.
+-        """
+-
+-        _initialize_counter(value = 0)
+-
+-        task_queue = Queue()
+-        
+-        # create and start the worker threads
+-        log('luigi_module: creating {0} worker threads'.format(_worker_count))        
+-        workers = [threading.Thread(target=_worker_batches_in_parallel,
+-                                    args=(task_queue, i)) for i in range(_worker_count)]
+-        for worker in workers:
+-            worker.start()
+-
+-        # each pipeline task queues its batch tasks
+-        # all execute in parallel
+-        for task in self.pipeline_tasks:
+-            task.run_batches_in_parallel(task_queue)
+-            
+-        # find out when all tasks have finished
+-        task_count = len(self.pipeline_tasks)
+-
+-        log('luigi_module: entering read_counter loop...')
+-        while True:
+-            value = _atomic_read_counter()
+-            log('luigi_module: _counter: {0}, task_count: {1}'.format(value, task_count))
+-            if value == task_count:
+-                break
+-            else:
+-                time.sleep(1)
+-
+-        # wait for empty queue
+-        log('luigi_module: waiting for empty task queue...')
+-        checks = 0
+-        while True:
+-            if task_queue.empty():
+-                break
+-            else:
+-                time.sleep(1)
+-                checks += 1
+-                if checks >= 10:
+-                    break
+-                
+-        # set the self.batches_finished flag in each pipeline_task object
+-        log('luigi_module: running collector pipelines...')
+-        for task in self.pipeline_tasks:
+-            task.batches_finished = True
+-            # run collector pipeline for each task in self.pipeline_task
+-            task.run_collector_pipeline()
+-
+-        # terminate workers
+-        log('luigi_module: terminating workers...')
+-        task_queue.put(_TERMINATE_WORKERS)
+-        for worker in workers:
+-            worker.join()
+-
+-        self.pipelines_finished = True        
+-            
+-            
+         
+     #def run(self):
+     def run_reconciliation(self):
+ 
+         # all pipeline tasks must have finished prior to this
+         assert self.pipelines_finished
+-        
++
+         log('dependencies done; run phenotype reconciliation')
+         client = util.mongo_client()
+ 
+@@ -297,7 +189,7 @@ class PhenotypeTask(): #luigi.Task):
+             for k in util.properties.keys():
+                 data_access.update_job_status(str(self.job), util.conn_string, data_access.PROPERTIES + "_" + k,
+                                               util.properties[k])
+-                
++
+             with open(self.output(), 'w') as outfile:
+                 phenotype_helper.write_phenotype_results(db, self.job, phenotype, self.phenotype, self.phenotype)
+ 
+@@ -341,6 +233,10 @@ class PhenotypeTask(): #luigi.Task):
+                         
+                 data_access.update_job_status(str(self.job), util.conn_string, data_access.COMPLETED,
+                                           "Job completed successfully")
++
++                # the solr "url" determines where to find the documents
++                if memory_data.IN_MEMORY_DATA == util.solr_url:
++                    memory_data._clear_buffer(self.job)
+                 outfile.write("DONE!")
+                 outfile.write('\n')
+ 
+@@ -358,7 +254,7 @@ class PhenotypeTask(): #luigi.Task):
+     def output(self):
+         #output_file = "%s/phenotype_job%s_output.txt" % (util.tmp_dir, str(self.job))
+         output_file = '{0}/phenotype_job{1}_output.txt'.format(util.tmp_dir, str(self.job))
+-        return output_file        
++        return output_file
+         #return luigi.LocalTarget("%s/phenotype_job%s_output.txt" % (util.tmp_dir, str(self.job)))
+ 
+ 
+@@ -377,23 +273,36 @@ def initialize_task_and_get_documents(pipeline_id, job_id, owner):
+             added.extend(related_terms)
+ 
+     solr_query = config.get_query(custom_query=pipeline_config.custom_query, terms=added)
+-    
+-    total_docs = solr_data.query_doc_size(solr_query,
+-                                          mapper_inst=util.report_mapper_inst,
+-                                          mapper_url=util.report_mapper_url,
+-                                          mapper_key=util.report_mapper_key,
+-                                          solr_url=util.solr_url,
+-                                          types=pipeline_config.report_types,
+-                                          filter_query=pipeline_config.filter_query,
+-                                          tags=pipeline_config.report_tags,
+-                                          report_type_query=pipeline_config.report_type_query,
+-                                          sources=pipeline_config.sources,
+-                                          cohort_ids=pipeline_config.cohort,
+-                                          job_results_filters=pipeline_config.job_results)
+ 
++    # the solr "url" determines where to find the documents
++    if util.solr_url.startswith('http'):
++        data_store = solr_data
++    elif memory_data.IN_MEMORY_DATA == util.solr_url:
++        data_store = memory_data
++        if not pipeline_config.report_source and len(pipeline_config.report_source) == 0:
++            pipeline_config.report_source = str(job_id)
++        pipeline_config.sources = [pipeline_config.report_source]
++    else:
++        data_store = filesystem_data
++
++    #print('sources {}'.format(pipeline_config.sources))
++
++    total_docs = data_store.query_doc_size(solr_query,
++                                           mapper_inst=util.report_mapper_inst,
++                                           mapper_url=util.report_mapper_url,
++                                           mapper_key=util.report_mapper_key,
++                                           solr_url=util.solr_url,
++                                           types=pipeline_config.report_types,
++                                           filter_query=pipeline_config.filter_query,
++                                           tags=pipeline_config.report_tags,
++                                           report_type_query=pipeline_config.report_type_query,
++                                           sources=pipeline_config.sources,
++                                           cohort_ids=pipeline_config.cohort,
++                                           job_results_filters=pipeline_config.job_results)
++        
+     #log('*** luigi_module: query_doc_size returned {0} docs, pipeline_id {1}, job_id {2} ***'.
+     #    format(total_docs, pipeline_id, job_id))
+-    
++        
+     jobs.update_job_status(str(job_id), util.conn_string, jobs.STATS + "_PIPELINE_" + str(pipeline_id) + "_SOLR_DOCS",
+                            str(total_docs))
+     doc_limit = config.get_limit(total_docs, pipeline_config)
+@@ -412,7 +321,7 @@ def run_pipeline(pipeline, pipelinetype, job, owner):
+     pipeline_config = data_access.get_pipeline_config(pipeline, util.conn_string)
+ 
+     collector_name = str(pipelinetype)
+-    log('get collector: {0}'.format(collector_name))        
++    log('get collector: {0}'.format(collector_name))    
+     if collector_name in registered_collectors:
+         collector_class = registered_collectors[collector_name]
+         if collector_class:
+@@ -441,14 +350,15 @@ class PipelineTask(): #luigi.Task):
+         self.solr_query = solr_query
+ 
+         # list of pipeline tasks, one for each document batch
+-        #self.batch_task_list = []
++        self.batch_task_list = []
++
+         self.batches_finished = False
+ 
+-    def get_task_batches(self):
+-        """
+-        Compute document batches and return a list of suitably-iniatialized tasks
+-        for running each batch.
+-        """
++    #def run_batch_tasks(self):
++    def run(self):
++
++        self.batch_task_list = []
++        self.batches_finished = False
+         
+         try:
+             self.solr_query, total_docs, doc_limit, ranges = initialize_task_and_get_documents(self.pipeline, self.job,
+@@ -458,60 +368,36 @@ class PipelineTask(): #luigi.Task):
+ 
+             # construct task list, each of which will process a unique batch of documents
+             if task.parallel_task:
+-                batch_task_list = [task(pipeline=self.pipeline,
+-                                        job=self.job,
+-                                        start=n,
+-                                        solr_query=self.solr_query,
+-                                        batch=n) for n in ranges]
++                self.batch_task_list = [task(pipeline=self.pipeline,
++                                             job=self.job,
++                                             start=n,
++                                             solr_query=self.solr_query,
++                                             batch=n) for n in ranges]
+             else:
+-                batch_task_list = [task(pipeline=self.pipeline,
+-                                        job=self.job,
+-                                        start=0,
+-                                        solr_query=self.solr_query,
+-                                        batch=0)]
+-            if len(batch_task_list) > 0:
+-                log('task_obj type: {0}'.format(type(batch_task_list[0])))
++                self.batch_task_list = [task(pipeline=self.pipeline,
++                                             job=self.job,
++                                             start=0,
++                                             solr_query=self.solr_query,
++                                             batch=0)]
++            if len(self.batch_task_list) > 0:
++                log('task_obj type: {0}'.format(type(self.batch_task_list[0])))
+ 
+         except Exception as ex:
+             traceback.print_exc(file=sys.stderr)
+             jobs.update_job_status(str(self.job), util.conn_string, jobs.WARNING, ''.join(traceback.format_stack()))
+             log(ex)
+ 
+-        return batch_task_list
+-
+-
+-    def run_batches_serially(self):
+-
+-        self.batches_finished = False
+-        batch_task_list = self.get_task_batches()
+-        
+         # all batches for this pipeline task run serially
+-        for task in batch_task_list:
++        for task in self.batch_task_list:
+             task.run()
+ 
+         self.batches_finished = True
+ 
+-        
+-    def run_batches_in_parallel(self, task_queue):
+-        """
+-        """
+-
+-        self.batches_finished = False
+-        batch_task_list = self.get_task_batches()
+-
+-        # add these tasks to the task_queue to run with all other batch tasks in parallel
+-        for task in batch_task_list:
+-            task_queue.put(task)
+-
+-        # increment a counter to indicate that all batches for this PopelineTask have been loaded
+-        _atomic_increment_counter()
+-    
+-
+     #def run(self):
+     def run_collector_pipeline(self):
+         # all batches for this PipelineTask must have run to completion
+         assert self.batches_finished
+-
++        
+         log('running collector pipeline')
+         run_pipeline(self.pipeline, self.pipelinetype, self.job, self.owner)
+         return self.complete()

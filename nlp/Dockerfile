@@ -23,9 +23,11 @@ SHELL ["/bin/bash", "--login", "-c"]
 
 RUN mamba install --file conda_requirements.txt
 RUN pip install -r conda_pip_requirements.txt
+RUN pip install hypercorn
 RUN python3 -m spacy download en_core_web_sm
 RUN python3 install_models.py
 
 COPY . .
 ENV PATH /opt/conda/envs/claritynlp/bin:$PATH
+# CMD ["hypercorn", "api:application", "--config", "hypercorn_config.toml", "-b", "$NLP_API_CONTAINER_PORT"]
 CMD ["hypercorn", "api:application", "--config", "hypercorn_config.toml", "-b", "$NLP_API_CONTAINER_PORT"]

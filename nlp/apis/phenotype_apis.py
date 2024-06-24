@@ -1,4 +1,6 @@
 from flask import request, Blueprint
+
+import util
 from luigi_tools import phenotype_helper, luigi_runner
 from data_access import *
 from algorithms import *
@@ -34,6 +36,13 @@ def post_phenotype(p_cfg: PhenotypeModel, raw_nlpql: str = '', background=False,
                                              phenotype_id=p_id, pipeline_id=-1,
                                              date_started=datetime.now(),
                                              job_type='PHENOTYPE'), util.conn_string)
+    if p_cfg.reports and len(p_cfg.reports) > 0:
+        util.solr_url = memory_data.IN_MEMORY_DATA
+        memory_data.load_buffer(str(job_id), p_cfg.reports)
+        p_cfg.report_source = str(job_id)
+    elif p_cfg.report_source and len(p_cfg.report_source) > 0:
+        # assumes memory data already loaded
+        util.solr_url = memory_data.IN_MEMORY_DATA
 
     if tuple_def_docs is not None and len(tuple_def_docs) > 0:
         # insert tuple def docs into Mongo
@@ -60,8 +69,8 @@ def post_phenotype(p_cfg: PhenotypeModel, raw_nlpql: str = '', background=False,
     output["status_endpoint"] = "%s/status/%s" % (util.main_url, str(job_id))
     # output["results_viewer"] = "%s?job=%s" % (
     #     util.results_viewer_url, str(job_id))
-    #output["luigi_task_monitoring"] = "%s/static/visualiser/index.html#search__search=job=%s" % (
-    #    util.luigi_url, str(job_id))
+    output["luigi_task_monitoring"] = "%s/static/visualiser/index.html#search__search=job=%s" % (
+        util.luigi_url, str(job_id))
     output["intermediate_results_csv"] = "%s/job_results/%s/%s" % (util.main_url, str(job_id),
                                                                    'phenotype_intermediate')
     output["main_results_csv"] = "%s/job_results/%s/%s" % (
@@ -94,6 +103,26 @@ def parse_nlpql(nlpql: str):
         return nlpql_results['phenotype'].to_json()
 
 
+
+@phenotype_app.route('/reports/<string:source_id>', methods=['POST'])
+def reports(source_id: str):
+    """POST a JSON array of documents (typically from NLPaaS)."""
+    if 'POST' == request.method and request.data:
+
+        # change the the solr URL to 'memory'
+        util.solr_url = memory_data.IN_MEMORY_DATA
+        
+        json_data = request.get_json()
+
+        docs = []
+        if 'reports' in json_data:
+            docs = json_data['reports']
+            memory_data.load_buffer(source_id, docs)
+            return '{0}\n'.format(memory_data.get_document_count(source_id))
+    else:
+        return 'Please POST report documents.'
+
+    
 @phenotype_app.route('/phenotype', methods=['POST'])
 def phenotype():
     """POST a phenotype job (JSON) to run"""
@@ -141,7 +170,6 @@ def nlpql():
         return json.dumps(post_nlpql(raw_nlpql, source_id, background), indent=4)
 
     return "Please POST text containing NLPQL."
-    
 
 
 @phenotype_app.route('/pipeline', methods=['POST'])

@@ -1,2 +1,11 @@
-[tool.ruff]
-line-length = 200
+[hypercorn]
+
+bind = "0.0.0.0:5000"
+workers = 9
+threads = 4
+accesslog = "-"
+errorlog = "-"
+
+[env]
+PORT = "5000"
+USE_HYPERCORN = "true"

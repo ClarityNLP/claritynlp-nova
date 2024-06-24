@@ -30,7 +30,7 @@ def read_property(env_name, config_tuple, default='', key_name=None):
         if len(key_name) > 0 and 'PASSWORD' not in key_name and 'KEY' not in key_name and 'USERNAME' not in key_name:
             properties[key_name] = property_name
     except Exception as ex:
-        log(repr(ex), ERROR)
+        log(f"Variable {key_name} is not set, setting to default of {default}")
         properties[key_name] = default
     return property_name
 
@@ -73,6 +73,7 @@ log_dir = read_property('NLP_API_LOG_DIR', ('log', 'dir'))
 luigi_scheduler = read_property('LUIGI_SCHEDULER_URL', ('luigi', 'scheduler'))
 luigi_url = read_property('SCHEDULER_VIRTUAL_HOST', ('luigi', 'url'))
 luigi_workers = read_property('LUIGI_WORKERS', ('luigi', 'workers'), default='5')
+# These need to be resolved - results_viewer_url and main_url 
 results_viewer_url = read_property(
     'RESULTS_CLIENT_URL', ('results_client', 'url'))
 main_url = read_property(
@@ -116,7 +117,7 @@ use_reordered_nlpql = read_property('USE_REORDERED_NLPQL',
 use_redis_caching = read_property('USE_REDIS_CACHING',
                                   ('optimizations', 'use_redis_caching'),
                                   default='false')
-
+                                #   perhaps here 
 cql_eval_url = read_property('FHIR_CQL_EVAL_URL', ('local', 'cql_eval_url'), key_name='cql_eval_url')
 fhir_data_service_uri = read_property('FHIR_DATA_SERVICE_URI', ('local', 'fhir_data_service_uri'),
                                       key_name='fhir_data_service_uri')

@@ -7,7 +7,7 @@ from pymongo.errors import BulkWriteError
 import data_access
 from ilock import ILock, ILockException
 from data_access import pipeline_config as config
-from data_access import solr_data, phenotype_stats
+from data_access import solr_data, filesystem_data, memory_data, phenotype_stats
 from data_access import update_phenotype_model
 from data_access import tuple_processor
 from luigi_tools import phenotype_helper
@@ -69,7 +69,7 @@ def _worker_pipelines_in_parallel(queue, worker_id):
     Continually check the queue for work items; terminate if None appears.
     Work items must implement a run() function.
     """
-    
+
     log('luigi_module: pipeline worker {0} running...'.format(worker_id))
     while True:
         try:
@@ -148,7 +148,7 @@ class PhenotypeTask(): #luigi.Task):
         phenotype_config['phenotype_id'] = int(self.phenotype)
 
         log("getting ready to execute pipelines...")
-        log('pipeline_ids: {0}'.format(pipeline_ids))        
+        log('pipeline_ids: {0}'.format(pipeline_ids))
         if len(pipeline_ids) > 0:
             configs = dict()
             for pipeline_id in pipeline_ids:
@@ -173,14 +173,14 @@ class PhenotypeTask(): #luigi.Task):
         """
 
         task_queue = Queue()
-        
+
         # create and start the worker threads
-        log('luigi_module: creating {0} worker threads'.format(_worker_count))        
+        log('luigi_module: creating {0} worker threads'.format(_worker_count))
         workers = [threading.Thread(target=_worker_pipelines_in_parallel,
                                     args=(task_queue, i)) for i in range(_worker_count)]
         for worker in workers:
             worker.start()
-        
+
         for task in self.pipeline_tasks:
             task_queue.put(task)
 
@@ -190,7 +190,7 @@ class PhenotypeTask(): #luigi.Task):
             worker.join()
 
         self.pipelines_finished = True
-        
+
 
     def run_batches_in_parallel(self):
         """
@@ -200,9 +200,9 @@ class PhenotypeTask(): #luigi.Task):
         _initialize_counter(value = 0)
 
         task_queue = Queue()
-        
+
         # create and start the worker threads
-        log('luigi_module: creating {0} worker threads'.format(_worker_count))        
+        log('luigi_module: creating {0} worker threads'.format(_worker_count))
         workers = [threading.Thread(target=_worker_batches_in_parallel,
                                     args=(task_queue, i)) for i in range(_worker_count)]
         for worker in workers:
@@ -212,7 +212,7 @@ class PhenotypeTask(): #luigi.Task):
         # all execute in parallel
         for task in self.pipeline_tasks:
             task.run_batches_in_parallel(task_queue)
-            
+
         # find out when all tasks have finished
         task_count = len(self.pipeline_tasks)
 
@@ -236,7 +236,7 @@ class PhenotypeTask(): #luigi.Task):
                 checks += 1
                 if checks >= 10:
                     break
-                
+
         # set the self.batches_finished flag in each pipeline_task object
         log('luigi_module: running collector pipelines...')
         for task in self.pipeline_tasks:
@@ -250,16 +250,16 @@ class PhenotypeTask(): #luigi.Task):
         for worker in workers:
             worker.join()
 
-        self.pipelines_finished = True        
-            
-            
-        
+        self.pipelines_finished = True
+
+
+
     #def run(self):
     def run_reconciliation(self):
 
         # all pipeline tasks must have finished prior to this
         assert self.pipelines_finished
-        
+
         log('dependencies done; run phenotype reconciliation')
         client = util.mongo_client()
 
@@ -297,7 +297,7 @@ class PhenotypeTask(): #luigi.Task):
             for k in util.properties.keys():
                 data_access.update_job_status(str(self.job), util.conn_string, data_access.PROPERTIES + "_" + k,
                                               util.properties[k])
-                
+
             with open(self.output(), 'w') as outfile:
                 phenotype_helper.write_phenotype_results(db, self.job, phenotype, self.phenotype, self.phenotype)
 
@@ -315,16 +315,16 @@ class PhenotypeTask(): #luigi.Task):
                         with ILock(_LOCK_NAME, timeout=_LOCK_WAIT_SECS):
 
                             # only a SINGLE ClarityNLP process can execute this code at any time
-                            
+
                             # force writes to disk by locking the Mongo admin database
                             log('*** Job {0}: FORCING MONGO WRITES ***'.format(self.job))
-                        
+
                             admin_db = client['admin']
                             fsync_result = admin_db.command('fsync', lock=True)
                             assert 1 == fsync_result['lockCount']
                             unlock_result = admin_db.command('fsyncUnlock')
                             assert 0 == unlock_result['lockCount']
-                            
+
                             log('*** Job {0}: ALL MONGO WRITES COMPLETED ***'.format(self.job))
 
                             wrote_docs = True
@@ -338,9 +338,14 @@ class PhenotypeTask(): #luigi.Task):
 
                 if not wrote_docs:
                     log('Job {0} failed to lock the Mongo admin database.'.format(self.job))
-                        
+
                 data_access.update_job_status(str(self.job), util.conn_string, data_access.COMPLETED,
                                           "Job completed successfully")
+
+                # the solr "url" determines where to find the documents
+                if memory_data.IN_MEMORY_DATA == util.solr_url:
+                    memory_data._clear_buffer(self.job)
+
                 outfile.write("DONE!")
                 outfile.write('\n')
 
@@ -358,7 +363,7 @@ class PhenotypeTask(): #luigi.Task):
     def output(self):
         #output_file = "%s/phenotype_job%s_output.txt" % (util.tmp_dir, str(self.job))
         output_file = '{0}/phenotype_job{1}_output.txt'.format(util.tmp_dir, str(self.job))
-        return output_file        
+        return output_file
         #return luigi.LocalTarget("%s/phenotype_job%s_output.txt" % (util.tmp_dir, str(self.job)))
 
 
@@ -377,23 +382,36 @@ def initialize_task_and_get_documents(pipeline_id, job_id, owner):
             added.extend(related_terms)
 
     solr_query = config.get_query(custom_query=pipeline_config.custom_query, terms=added)
-    
-    total_docs = solr_data.query_doc_size(solr_query,
-                                          mapper_inst=util.report_mapper_inst,
-                                          mapper_url=util.report_mapper_url,
-                                          mapper_key=util.report_mapper_key,
-                                          solr_url=util.solr_url,
-                                          types=pipeline_config.report_types,
-                                          filter_query=pipeline_config.filter_query,
-                                          tags=pipeline_config.report_tags,
-                                          report_type_query=pipeline_config.report_type_query,
-                                          sources=pipeline_config.sources,
-                                          cohort_ids=pipeline_config.cohort,
-                                          job_results_filters=pipeline_config.job_results)
+
+    # the solr "url" determines where to find the documents
+    if util.solr_url.startswith('http'):
+        data_store = solr_data
+    elif memory_data.IN_MEMORY_DATA == util.solr_url:
+        data_store = memory_data
+        if not pipeline_config.report_source and len(pipeline_config.report_source) == 0:
+            pipeline_config.report_source = str(job_id)
+        pipeline_config.sources = [pipeline_config.report_source]
+    else:
+        data_store = filesystem_data
+
+    #print('sources {}'.format(pipeline_config.sources))
+
+    total_docs = data_store.query_doc_size(solr_query,
+                                           mapper_inst=util.report_mapper_inst,
+                                           mapper_url=util.report_mapper_url,
+                                           mapper_key=util.report_mapper_key,
+                                           solr_url=util.solr_url,
+                                           types=pipeline_config.report_types,
+                                           filter_query=pipeline_config.filter_query,
+                                           tags=pipeline_config.report_tags,
+                                           report_type_query=pipeline_config.report_type_query,
+                                           sources=pipeline_config.sources,
+                                           cohort_ids=pipeline_config.cohort,
+                                           job_results_filters=pipeline_config.job_results)
 
     #log('*** luigi_module: query_doc_size returned {0} docs, pipeline_id {1}, job_id {2} ***'.
     #    format(total_docs, pipeline_id, job_id))
-    
+
     jobs.update_job_status(str(job_id), util.conn_string, jobs.STATS + "_PIPELINE_" + str(pipeline_id) + "_SOLR_DOCS",
                            str(total_docs))
     doc_limit = config.get_limit(total_docs, pipeline_config)
@@ -412,7 +430,7 @@ def run_pipeline(pipeline, pipelinetype, job, owner):
     pipeline_config = data_access.get_pipeline_config(pipeline, util.conn_string)
 
     collector_name = str(pipelinetype)
-    log('get collector: {0}'.format(collector_name))        
+    log('get collector: {0}'.format(collector_name))
     if collector_name in registered_collectors:
         collector_class = registered_collectors[collector_name]
         if collector_class:
@@ -449,7 +467,7 @@ class PipelineTask(): #luigi.Task):
         Compute document batches and return a list of suitably-iniatialized tasks
         for running each batch.
         """
-        
+
         try:
             self.solr_query, total_docs, doc_limit, ranges = initialize_task_and_get_documents(self.pipeline, self.job,
                                                                                                self
@@ -484,14 +502,14 @@ class PipelineTask(): #luigi.Task):
 
         self.batches_finished = False
         batch_task_list = self.get_task_batches()
-        
+
         # all batches for this pipeline task run serially
         for task in batch_task_list:
             task.run()
 
         self.batches_finished = True
 
-        
+
     def run_batches_in_parallel(self, task_queue):
         """
         """
@@ -505,7 +523,7 @@ class PipelineTask(): #luigi.Task):
 
         # increment a counter to indicate that all batches for this PopelineTask have been loaded
         _atomic_increment_counter()
-    
+
 
     #def run(self):
     def run_collector_pipeline(self):

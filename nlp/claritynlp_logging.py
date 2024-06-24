@@ -42,27 +42,22 @@ def log(obj='', level=INFO, file=sys.stdout):
     if level == ERROR or level == CRITICAL:
         if file == sys.stdout:
             file = sys.stderr
-
-    if the_app:
-        message = "{}{}".format(the_caller, repr_obj)
+    if the_app: 
+        # Use Hypercorn's logger
+        logger = logging.getLogger('hypercorn')
         if level == DEBUG:
-            the_app.logger.debug(message)
+            logger.debug(repr_obj)
         elif level == WARNING:
-            the_app.logger.warning(message)
+            logger.warning(repr_obj)
         elif level == ERROR:
-            the_app.logger.error(message)
+            logger.error(repr_obj)
         elif level == CRITICAL:
-            the_app.logger.critical(message)
+            logger.critical(repr_obj)
         else:
-            the_app.logger.info(message)
-    else:
-        message = repr_obj
-        the_time = strftime("%Y-%m-%d %H:%M:%S-%Z", localtime())
-        print("[{}] {} in claritynlp_logging: {}{}".format(the_time, level, the_caller, message), file=file)
-
+            logger.info(repr_obj)
 
 def setup_log(app):
     global the_app
     the_app = app
-
-
+    # Configure Hypercorn's logger
+    logging.basicConfig(level=logging.DEBUG)
