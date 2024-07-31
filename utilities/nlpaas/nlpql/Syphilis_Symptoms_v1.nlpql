@@ -1,0 +1,25 @@
+// Phenotype library name
+phenotype "Syphilis_Symptoms" version "1";
+
+include ClarityCore version "1.0" called Clarity;
+
+
+termset syphilis_symptoms_unstructured_terms: [
+    "Abnormal decrease in weight","Abnormal loss of weight","Abnormal loss of weight and underweight","Abnormal weight loss","Acute lymphadenitis","tired all the time","Chronic fatigue","Enlarged lymph nodes","Enlarged lymph nodes","Enlargement of lymph nodes","FATIGUE","GLANDS ENLARGED","Loss of weight","Lymph node enlargement","LYMPHADENOPATHY","adenopathy","malaise","SWELLING LYMPH NODES","SWOLLEN GLANDS","TIREDNESS","Weariness","Weight loss","Chancre","Sores","Rash","Dysuria","Itching","Hair loss","Alopecia","Condylomata Lata","sore throat","Pharyngitis","Dyspareunia","Painful intercourse","Painful Sex","Mucous Patch","Balanitis","Fever","Epididymitis","Proctitis","Jaundice","Lesions","Ulcers","Decreased visual acuity","Vision changes","Cerebrospinal fluid changes","Tinnitus","Vertigo","Sudden hearing loss","Fluctuating hearing loss","Positive Weber test","Positive Rinne test","Dizziness","Headache","Floaters","Eye pain","Eye redness","Flashing lights","Eye pressure","Sensitivity to light","Photophobia","Reduced visual acuity","Photopsia","Ringing in ears","Charcot joint","Saber shins","Argyll Robertson pupil","Cranial nerve palsy","Paresthesia","incontinence","Urinary incontinence","Fecal incontinence","Maculopapular rash","Palmar rash","Plantar rash","Moth eaten","Moth-eaten","Insomnia","Memory loss","Personality change","Inability to concentrate","Emotional lability","Depression","Agitation","Euphoria","Confusion","Disorientation","Delusions of grandeur","Paranoia","Seizures","Pupillary abnormalities","Slurred speech","Tremor","Lightning pain","Lancinating pain","Ataxia","Visceral crisis","Romberg sign","Absent ankle jerk","Absent knee jerk","Absent ankle reflex","Absent knee reflex","Impaired vibratory sense","Impaired position sense","Impaired proprioception","Polyradiculopathy","Nodular lesions","Noduloulcerative lesions","Papilledema","bowing shins","bowing of the shins","Enlargement of sternoclavicular portion of clavicle","Higoumenakis sign","Clutton joint","Painless arthritis of knee","Paroxysmal cold hemoglobinuria","Hutchinson teeth","Mulberry molars","Perforation of hard palate","Corneal scarring","Frontal bossing","Saddle nose","Short maxilla","Protuberant mandible","Rhagades","Perioral fissures","Snuffles","Fissures of lips","Cheilosis","Arrested hydrocephalus","Wimberger sign","Metaphyseal serration","Sawtooth metaphysis","Diaphyseal periostitis","Pseudoparalysis","Persistent rhinitis","Granulomatous lesions","Coronary ostial stenosis","Tambour second heart sound","Calcified ascending aortic arch","Synovitis","ulcerative lesion","pustular lesion","gummatous lesion","papular rash","paresis"
+];
+
+
+define syphilis_symptoms_unstructured:
+    Clarity.ProviderAssertion({
+		termset: [syphilis_symptoms_unstructured_terms]
+	});
+
+
+define final syphilis_symptoms:
+    Tuple {
+        "questionConcept": "2000000012",
+        "answerValue": syphilis_symptoms_unstructured.term,
+        "answerType": "String",
+        "sourceNote": syphilis_symptoms_unstructured.sentence
+    }
+where syphilis_symptoms_unstructured;

@@ -1,5 +1,6 @@
 from pymongo import MongoClient
-from flask import Response
+from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 import util
 
 def writeResultFeedback(data):
@@ -29,9 +30,9 @@ def writeResultFeedback(data):
 
 
         # returning 200 response
-        return Response("Successfully wrote result feedback", status=200, mimetype='application/json')
+        return JSONResponse(content={"message":"Successfully wrote result feedback"}, status=200)
     except Exception as e:
         # returning 400 response
-        return Response(str(e), status=400, mimetype='application/json')
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         client.close()

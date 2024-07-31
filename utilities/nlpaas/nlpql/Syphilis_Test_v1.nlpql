@@ -1,0 +1,15 @@
+// Phenotype library name
+phenotype "Syphilis_Test" version "1";
+
+include ClarityCore version "1.0" called ClarityNLP;
+
+
+termset syphilis_test_unstructured_terms: [
+    "syphilis", "rash"
+];
+
+
+define final syphilis_test_unstructured:
+    ClarityNLP.TermFinder({
+		termset: [syphilis_test_unstructured_terms]
+	});

@@ -9,8 +9,21 @@ import sys
 import json
 import nltk
 from nltk.tokenize import sent_tokenize
+
+if __name__ == '__main__':
+    # interactive testing
+    match = re.search(r'nlp/', sys.path[0])
+    if match:
+        nlp_dir = sys.path[0][:match.end()]
+        sys.path.append(nlp_dir)
+    else:
+        path, module_name = os.path.split(__file__)
+        print('\n*** {0}: nlp dir not found ***\n'.format(module_name))
+        sys.exit(0)
+
+    
 import util
-from claritynlp_logging import log, ERROR, DEBUG
+#from claritynlp_logging import log, ERROR, DEBUG
 
 from section_tagger import section_tagger_init
 from section_tagger import process_report
@@ -52,7 +65,7 @@ if __name__ == '__main__':
         infile = open(json_file, 'rt')
         data = json.load(infile)
     except:
-        log("Could not open file {0}.".format(json_file), ERROR)
+        print("Could not open file {0}.".format(json_file))
         sys.exit(-1)
 
     infile.close()
@@ -65,7 +78,12 @@ if __name__ == '__main__':
     index = 0
     while (ok):
         try:
-            report = data['response']['docs'][index][util.solr_text_field]
+            if 'response' in data and 'docs' in data['response']:
+                # JSON file has a Solr query response header
+                report = data['response']['docs'][index][util.solr_text_field]
+            else:
+                # assume JSON is just an array of docs
+                report = data[index]['report_text']
         except:
             ok = False
             break
@@ -81,12 +99,12 @@ if __name__ == '__main__':
 
         section_headers, section_texts = process_report(clean_report)
         for i in range(len(section_headers)):
-            log("<{0}>\n\t{1}".format(section_headers[i].to_output_string(), section_texts[i]))
+            print("<{0}>\n\t{1}".format(section_headers[i].to_output_string(), section_texts[i]))
 
-        log("\n\n*** END OF REPORT {0} ***\n\n".format(index))
+        print("\n\n*** END OF REPORT {0} ***\n\n".format(index))
         
         index += 1
         if max_reports > 0 and index >= max_reports:
             break
 
-    log("Processed {0} reports.".format(index))
+    print("Processed {0} reports.".format(index))

@@ -1,0 +1,25 @@
+// Phenotype library name
+phenotype "SyphilisDiagnoses" version "1";
+
+include ClarityCore version "1.0" called Clarity;
+
+
+termset syphilis_diagnoses_unstructured_terms: [
+    "Syphilis","Syphilitic","Primary syphilis","Secondary syphilis","Tertiary syphilis","Latent syphilis","Early latent syphilis","Late latent syphilis","Early non-primary non-secondary syphilis","ENPNS","P&S syphilis","Unknown duration or late syphilis","Treponema pallidum","Pallidum","T. pallidum","Treponemal","Trep test","Congenital syphilis"
+];
+
+
+define syphilis_diagnoses_unstructured:
+    Clarity.ProviderAssertion({
+		termset: [syphilis_diagnoses_unstructured_terms]
+	});
+
+
+define final syphilis_diagnoses:
+    Tuple {
+        "questionConcept": "2000000010",
+        "answerValue": syphilis_diagnoses_unstructured.term,
+        "answerType": "String",
+        "sourceNote": syphilis_diagnoses_unstructured.sentence
+    }
+where syphilis_diagnoses_unstructured;

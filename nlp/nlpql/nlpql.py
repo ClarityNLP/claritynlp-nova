@@ -2,6 +2,7 @@ import antlr4
 import traceback
 from data_access import PhenotypeModel, PhenotypeDefine, PhenotypeEntity, PhenotypeOperations
 from claritynlp_logging import log, ERROR, DEBUG
+import logging 
 import json
 
 if __name__ is not None and "." in __name__:
@@ -152,7 +153,7 @@ def handle_limit(context, phenotype: PhenotypeModel):
 
 
 def handle_phenotype_name(context, phenotype: PhenotypeModel):
-    # log('phenotype_name')
+    log('phenotype_name')
     previous = ''
     phenotype_def = None
     name = ''
@@ -175,7 +176,7 @@ def handle_description(context, phenotype: PhenotypeModel):
 
 
 def handle_data_model(context, phenotype: PhenotypeModel):
-    # log('data model')
+    log('data model')
     previous = ''
     phenotype_def = None
     for c in context.getChildren():
@@ -194,7 +195,7 @@ def handle_data_model(context, phenotype: PhenotypeModel):
 
 
 def handle_include(context, phenotype: PhenotypeModel):
-    # log('include')
+    log('include')
 
     # ohdsi_helpers = PhenotypeDefine('OHDSIHelpers', 'include', version='1.0', alias='OHDSI')
     # include OHDSIHelpers version "1.0" called OHDSI;
@@ -221,7 +222,7 @@ def handle_include(context, phenotype: PhenotypeModel):
 
 
 def handle_code_system(context, phenotype: PhenotypeModel):
-    # log('code system')
+    log('code system')
 
     # codesystem OMOP: "http://omop.org";
     # omop = PhenotypeDefine('OMOP', 'codesystem', values=['http://omop.org'])
@@ -243,7 +244,7 @@ def handle_code_system(context, phenotype: PhenotypeModel):
 
 
 def handle_value_set(context, phenotype: PhenotypeModel):
-    # log('value set')
+    log('value set')
 
     # Sepsis = PhenotypeDefine('Sepsis', 'valueset', library='OHDSI',
     #                          funct='getConceptSet',
@@ -264,7 +265,7 @@ def handle_value_set(context, phenotype: PhenotypeModel):
 
 
 def handle_term_set(context, phenotype: PhenotypeModel):
-    # log('term set')
+    log('term set')
     # termset RigorsTerms: ["Rigors",
     # "Rigoring",
     # "Rigours",
@@ -284,7 +285,7 @@ def handle_term_set(context, phenotype: PhenotypeModel):
 
 
 def handle_document_set(context, phenotype: PhenotypeModel):
-    # log('document set')
+    log('document set')
     # documentset ProviderNotes: Clarity.createDocumentList("'Physician' OR 'Nurse' OR 'Note' OR 'Discharge Summary'");
 
     call = get_pair_method(context.getChild(1))

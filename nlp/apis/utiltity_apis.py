@@ -1,8 +1,11 @@
 import simplejson
-from flask import send_file, Blueprint, Response, request
+# from flask import send_file, Blueprint, Response, request
+from fastapi import APIRouter
 from os import listdir
 from os.path import isfile, join
 from claritynlp_logging import log, ERROR, DEBUG
+from fastapi.responses import JSONResponse
+from starlette.responses import FileResponse 
 
 
 from data_access import *
@@ -12,15 +15,15 @@ import tasks
 import subprocess
 import json
 
-utility_app = Blueprint('utility_app', __name__)
+utility_app = APIRouter()
 
 
-@utility_app.route('/')
-def home():
+@utility_app.get('/')
+async def home():
     return "Welcome to ClarityNLP!"
 
 
-@utility_app.route('/kill_job/<int:job_id>', methods=['GET'])
+@utility_app.get('/kill_job/<int:job_id>')
 def kill_job(job_id: int):
     log('killing job now ' + str(job_id))
     cmd = "ps -ef | grep luigi | grep -v luigid | grep \"job %d\" | awk '{print $2}'" % job_id
@@ -43,7 +46,7 @@ def kill_job(job_id: int):
             return "Unable to kill job. %s" % err.decode("utf-8")
 
 
-@utility_app.route('/delete_job/<int:job_id>', methods=['GET'])
+@utility_app.get('/delete_job/<int:job_id>')
 def delete_job_by_id(job_id: int):
     log('deleting job now ' + str(job_id))
     flag = delete_job(str(job_id), util.conn_string)
@@ -53,28 +56,28 @@ def delete_job_by_id(job_id: int):
         return "Unable to delete Job!"
 
 
-@utility_app.route('/job_results/<int:job_id>/<string:job_type>', methods=['GET'])
+@utility_app.get('/job_results/<int:job_id>/<string:job_type>')
 def get_job_results(job_id: int, job_type: str):
     """GET job results as CSV"""
     try:
         job_output = job_results(job_type, str(job_id))
-        return send_file(job_output)
+        return FileResponse(job_output, media_type='text/csv', filename=f"job_id_{job_id}_{job_type}.csv")
     except Exception as ex:
         return "Failed to get job results" + str(ex)
 
 
-@utility_app.route('/sections', methods=['GET'])
+@utility_app.get('/sections')
 def get_section_source():
     """GET source file for sections and synonyms"""
     try:
         file_path = get_sec_tag_source_tags()
-        return send_file(file_path)
+        return FileResponse(file_path)
     except Exception as ex:
         log(ex)
         return "Failed to retrieve sections source file"
 
 
-@utility_app.route("/report_type_mappings", methods=["GET"])
+@utility_app.get("/report_type_mappings")
 def report_type_mappings():
     """GET dictionary of report type mappings"""
     mappings = get_report_type_mappings(
@@ -82,7 +85,7 @@ def report_type_mappings():
     return simplejson.dumps(mappings, sort_keys=True, indent=4 * ' ')
 
 
-@utility_app.route('/pipeline_types', methods=['GET'])
+@utility_app.get('/pipeline_types')
 def pipeline_types():
     """GET valid pipeline types"""
     try:
@@ -91,7 +94,7 @@ def pipeline_types():
         return "Failed to get pipeline types" + str(ex)
 
 
-@utility_app.route('/status/<int:job_id>', methods=['GET'])
+@utility_app.get('/status/<int:job_id>')
 def get_job_status(job_id: int):
     """GET current job status"""
     try:
@@ -101,7 +104,7 @@ def get_job_status(job_id: int):
         return "Failed to get job status" + str(e)
 
 
-@utility_app.route('/stats/<string:job_ids>', methods=['GET'])
+@utility_app.get('/stats/<string:job_ids>')
 def get_job_stats(job_ids: str):
     """GET current job stats"""
     try:
@@ -111,7 +114,7 @@ def get_job_stats(job_ids: str):
         return "Failed to get job stats" + str(e)
 
 
-@utility_app.route('/performance/<string:job_ids>', methods=['GET'])
+@utility_app.get('/performance/<string:job_ids>')
 def get_job_performance(job_ids: str):
     """GET current job performance"""
     try:
@@ -121,7 +124,7 @@ def get_job_performance(job_ids: str):
         return "Failed to get job stats" + str(e)
 
 
-@utility_app.route('/document/<string:report_id>', methods=['GET'])
+@utility_app.get('/document/<string:report_id>')
 def get_document_by_id(report_id: str):
     """GET Solr document by id"""
     try:
@@ -134,7 +137,7 @@ def get_document_by_id(report_id: str):
 sample_path = '../nlpql/'
 
 
-@utility_app.route('/nlpql_samples', methods=['GET'])
+@utility_app.get('/nlpql_samples')
 def get_nlpql_samples():
     """GET NLPQL samples"""
     try:
@@ -153,7 +156,7 @@ def get_nlpql_samples():
         return "Failed to get nlpql samples" + str(e)
 
 
-@utility_app.route('/nlpql_text/<string:subdir>/<string:name>', methods=['GET'])
+@utility_app.get('/nlpql_text/<string:subdir>/<string:name>')
 def get_nlpql_text(subdir: str, name: str):
     """GET NLPQL sample by name"""
     try:
@@ -162,25 +165,22 @@ def get_nlpql_text(subdir: str, name: str):
             return f.read()
     except Exception as e:
         return "Failed to get nlpql text" + str(e)
-
-
-@utility_app.route('/write_nlpql_feedback', methods=['GET', 'POST'])
-def write_nlpql_feedback():
+    
+@utility_app.post("/write_nlpql_feedback")
+async def write_nlpql_feedback(data: str):
     """Write NLPQL feedback"""
-    if request.method == 'POST':
-        data = request.get_json()
-        response = writeResultFeedback(data)
-        return response
-    else:
-        return Response('Only POST requests are supported', status=400, mimetype='application/json')
+    response = writeResultFeedback(data)
+    return JSONResponse(response)
+
+@utility_app.get("/write_nlpql_feedback")
+async def get_nlpql_feedback():
+    """GET method not supported"""
+    return JSONResponse(content={"message": "Only POST requests are supported"}, status_code=400)
 
 
-@utility_app.route('/library', methods=['GET'])
+@utility_app.get('/library')
 def library():
     """Get all NLPQL in NLPQL Library"""
-    if request.method == 'GET':
-        library = get_library(util.conn_string)
-        response = json.dumps(library, indent=4, sort_keys=True, default=str)
-        return response
-    else:
-        return Response('Only GET requests are supported', status=400, mimetype='application/json')
+    library = get_library(util.conn_string)
+    response = json.dumps(library, indent=4, sort_keys=True, default=str)
+    return response

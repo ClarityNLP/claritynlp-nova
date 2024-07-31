@@ -1,0 +1,98 @@
+// Phenotype library name
+phenotype "Pregnancy" version "1";
+
+include ClarityCore version "1.0" called Clarity;
+
+
+termset lmp_unstructured_terms: [
+    "Last menstrual period","LMP","Last menstrual cycle","missed menstrual period","late menstrual period","missed period","amenorrhea","oligomenorrhea"
+];
+
+termset pregnant_unstructured_terms: [
+    "pregnancy","Pregnant","gravid","gestation","pregnancy","pregnancy-related","expected date of delivery","EDD","expected date of confinement","EDC","gestatinoal age","trimester"
+];
+
+termset prenatal_care_unstructured_terms: [
+    "Antenatal","Prenatal","fetal ultrasound","transvaginal ultrasound","transvaginal u/s","transabdominal ultrasound","transabdominal u/s","fetal echocardiography","gestational diabetes","amniocentesis","Anhydromnios","Oligohydramnios","fetus","fetal"
+];
+
+termset pregnancy_test_unstructured_terms: [
+    "Pregnancy test","hCG","human chorionic gonadotropin","Upreg","HPT","Home pregnancy test","HPT kit","urine pregnancy test","serum pregnancy test"
+];
+
+termset delivery_related_unstructured_terms: [
+    "labor","C-section","Cesarean section","delivery","LSCS","preterm","full-term","episiotomy","placenta","placental"
+];
+
+
+define lmp_unstructured:
+    Clarity.ProviderAssertion({
+		termset: [lmp_unstructured_terms]
+	});
+
+define pregnant_unstructured:
+    Clarity.ProviderAssertion({
+		termset: [pregnant_unstructured_terms]
+	});
+
+define prenatal_care_unstructured:
+    Clarity.ProviderAssertion({
+		termset: [prenatal_care_unstructured_terms]
+	});
+
+define pregnancy_test_unstructured:
+    Clarity.ValueExtraction({
+		termset: [pregnancy_test_unstructured_terms],
+		enum_list: ["positive"," pos"," &"]
+	});
+
+define delivery_related_unstructured:
+    Clarity.ProviderAssertion({
+		termset: [delivery_related_unstructured_terms]
+	});
+
+
+define final lmp:
+    Tuple {
+        "questionConcept": "2000000013",
+        "answerValue": lmp_unstructured.term,
+        "answerType": "String",
+        "sourceNote": lmp_unstructured.sentence
+    }
+where lmp_unstructured;
+
+define final pregnant:
+    Tuple {
+        "questionConcept": "2000000014",
+        "answerValue": pregnant_unstructured.term,
+        "answerType": "String",
+        "sourceNote": pregnant_unstructured.sentence
+    }
+where pregnant_unstructured;
+
+define final prenatal_care:
+    Tuple {
+        "questionConcept": "2000000015",
+        "answerValue": prenatal_care_unstructured.term,
+        "answerType": "String",
+        "sourceNote": prenatal_care_unstructured.sentence
+    }
+where prenatal_care_unstructured;
+
+define final pregnancy_test:
+    Tuple {
+        "questionConcept": "2000000016",
+        "answerValue": pregnancy_test_unstructured.term&"^"&pregnancy_test_unstructured.value,
+        "answerType": "String",
+        "sourceNote": pregnancy_test_unstructured.sentence
+    }
+where pregnancy_test_unstructured;
+
+define final delivery_related:
+    Tuple {
+        "questionConcept": "2000000017",
+        "answerValue": delivery_related_unstructured.term,
+        "answerType": "String",
+        "sourceNote": delivery_related_unstructured.sentence
+    }
+where delivery_related_unstructured;

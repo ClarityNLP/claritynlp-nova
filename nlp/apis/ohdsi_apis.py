@@ -1,77 +1,70 @@
-from flask import request, Blueprint
-
+# from flask import request, Blueprint
+from fastapi import APIRouter, Query
 from algorithms import *
 from data_access import *
 from ohdsi import *
 from claritynlp_logging import log, ERROR, DEBUG
 
 
-ohdsi_app = Blueprint('ohdsi_app', __name__)
+ohdsi_app = APIRouter()
 
 
-@ohdsi_app.route('/ohdsi_create_cohort', methods=['GET'])
-def ohdsi_create_cohort():
+@ohdsi_app.get('/ohdsi_create_cohort')
+def ohdsi_create_cohort(file: str = Query(...)):
     """Creating Cohorts"""
-    if request.method == 'GET':
-        filepath = 'ohdsi/data/' + request.args.get('file')
+    try:
+        filepath = 'ohdsi/data/' + file
         msg = createCohort(filepath)
         return msg
+    except Exception as e: 
+        return "Could not retrieve Cohort"
 
-    return "Could not retrieve Cohort"
 
-
-@ohdsi_app.route('/ohdsi_get_conceptset', methods=['GET'])
-def ohdsi_get_conceptset():
+@ohdsi_app.get('/ohdsi_get_conceptset')
+def ohdsi_get_conceptset(file: str = Query(...)):
     """Get concept set details."""
-    if request.method == 'GET':
-        filepath = 'ohdsi/data/' + request.args.get('file')
+    try: 
+        filepath = 'ohdsi/data/' + file
         conceptset = getConceptSet(filepath)
         return conceptset
+    except Exception as e: 
+        return "Could not retrieve Concept Set"
 
-    return "Could not retrieve Concept Set"
 
-
-@ohdsi_app.route('/ohdsi_get_cohort', methods=['GET'])
-def ohdsi_get_cohort():
+@ohdsi_app.get('/ohdsi_get_cohort')
+def ohdsi_get_cohort(cohort_id):
     """Get cohort details from OHDSI."""
-    if request.method == 'GET':
-        cohort_id = request.args.get('cohort_id')
+    try: 
         cohort = json.dumps(getCohort(cohort_id))
         return cohort
+    except Exception as e: 
+        return "Could not retrieve Cohort"
 
-    return "Could not retrieve Cohort"
 
-
-@ohdsi_app.route('/ohdsi_cohort_status', methods=['GET'])
-def ohdsi_cohort_status():
+@ohdsi_app.get('/ohdsi_cohort_status')
+def ohdsi_cohort_status(cohort_id):
     """Get status of OHDSI cohort creation"""
-    if request.method == 'GET':
-        cohort_id = request.args.get('cohort_id')
+    try: 
         status = getCohortStatus(cohort_id)
         return status
+    except Exception as e: 
+        return "Could not retrieve cohort status"
 
-    return "Could not retrieve cohort status"
 
-
-@ohdsi_app.route('/ohdsi_get_cohort_by_name', methods=['GET'])
-def ohdsi_get_cohort_by_name():
+@ohdsi_app.get('/ohdsi_get_cohort_by_name')
+def ohdsi_get_cohort_by_name(cohort_name):
     """Get cohort details from OHDSI by giving Cohort name."""
-    if request.method == 'GET':
-        cohort_name = request.args.get('cohort_name')
+    try: 
         cohort = json.dumps(getCohortByName(cohort_name))
         return cohort
+    except Exception as e: 
+        return "Could not retrieve Cohort"
 
-    return "Could not retrieve Cohort"
 
-
-@ohdsi_app.route('/vocab_expansion', methods=['GET'])
-def vocabulary_expansion():
+@ohdsi_app.get('/vocab_expansion')
+def vocabulary_expansion(k: str, concept: str, vocab: str):
     """GET related terms based a user entered term, PARAMETERS: type=1 (synonyms), 2 (ancestors), 3 (descendants), concept=user entered term, vocab=(optional, default is SNOMED)"""
-    if request.method == 'GET':
-
-        k = request.args.get('type')
-        concept = request.args.get('concept')
-        vocab = request.args.get('vocab')
+    try:
         log(vocab)
 
         result = {"vocab": []}
@@ -89,5 +82,5 @@ def vocabulary_expansion():
             result['vocab'].append(i[0])
 
         return str(result)
-
-    return 'Vocabulary Expansion Failed'
+    except Exception as e: 
+        return 'Vocabulary Expansion Failed'

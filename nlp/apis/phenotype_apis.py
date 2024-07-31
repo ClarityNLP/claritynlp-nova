@@ -1,9 +1,14 @@
-from flask import request, Blueprint
+# from flask import request, Blueprint
+from fastapi import APIRouter, Query, Request
+
+from data_access import memory_data
+import util
 from luigi_tools import phenotype_helper, luigi_runner
 from data_access import *
 from algorithms import *
 from nlpql import *
 from apis.api_helpers import init
+from typing import Optional 
 from tasks import register_tasks, registered_pipelines, registered_collectors
 from claritynlp_logging import log, ERROR, DEBUG
 
@@ -13,7 +18,7 @@ log(registered_pipelines)
 log(registered_collectors)
 
 
-phenotype_app = Blueprint('phenotype_app', __name__)
+phenotype_app = APIRouter()
 
 
 def post_phenotype(p_cfg: PhenotypeModel, raw_nlpql: str = '', background=False, tuple_def_docs=None):
@@ -34,6 +39,13 @@ def post_phenotype(p_cfg: PhenotypeModel, raw_nlpql: str = '', background=False,
                                              phenotype_id=p_id, pipeline_id=-1,
                                              date_started=datetime.now(),
                                              job_type='PHENOTYPE'), util.conn_string)
+    if p_cfg.reports and len(p_cfg.reports) > 0:
+        util.solr_url = memory_data.IN_MEMORY_DATA
+        memory_data.load_buffer(str(job_id), p_cfg.reports)
+        p_cfg.report_source = str(job_id)
+    elif p_cfg.report_source and len(p_cfg.report_source) > 0:
+        # assumes memory data already loaded
+        util.solr_url = memory_data.IN_MEMORY_DATA
 
     if tuple_def_docs is not None and len(tuple_def_docs) > 0:
         # insert tuple def docs into Mongo
@@ -60,8 +72,8 @@ def post_phenotype(p_cfg: PhenotypeModel, raw_nlpql: str = '', background=False,
     output["status_endpoint"] = "%s/status/%s" % (util.main_url, str(job_id))
     # output["results_viewer"] = "%s?job=%s" % (
     #     util.results_viewer_url, str(job_id))
-    #output["luigi_task_monitoring"] = "%s/static/visualiser/index.html#search__search=job=%s" % (
-    #    util.luigi_url, str(job_id))
+    output["luigi_task_monitoring"] = "%s/static/visualiser/index.html#search__search=job=%s" % (
+        util.luigi_url, str(job_id))
     output["intermediate_results_csv"] = "%s/job_results/%s/%s" % (util.main_url, str(job_id),
                                                                    'phenotype_intermediate')
     output["main_results_csv"] = "%s/job_results/%s/%s" % (
@@ -91,21 +103,40 @@ def parse_nlpql(nlpql: str):
     if nlpql_results['has_errors'] or nlpql_results['has_warnings']:
         return json.dumps(nlpql_results)
     else:
-        return nlpql_results['phenotype'].to_json()
+        return nlpql_results['phenotype']
 
 
-@phenotype_app.route('/phenotype', methods=['POST'])
-def phenotype():
+
+@phenotype_app.post('/reports/<string:source_id>')
+def reports(source_id: str, data: dict):
+    """POST a JSON array of documents (typically from NLPaaS)."""
+    try:
+        # change the the solr URL to 'memory'
+        util.solr_url = memory_data.IN_MEMORY_DATA
+
+        docs = []
+        if 'reports' in data:
+            docs = data['reports']
+            memory_data.load_buffer(source_id, docs)
+            return '{0}\n'.format(memory_data.get_document_count(source_id))
+    except Exception as e: 
+        return 'Please POST report documents.'
+
+    
+@phenotype_app.post('/phenotype')
+async def phenotype(request: Request, background_str: str = Query("true")):
     """POST a phenotype job (JSON) to run"""
-    if not request.data:
+    data = await request.body()
+    data = data.decode("utf-8")  # Decode bytes to string
+
+    if not data:
         return 'POST a JSON phenotype config to execute or an id to GET. Body should be phenotype JSON'
     try:
-        background_str = request.args.get('background', "true")
         if len(background_str) > 0 and (background_str[0]).lower() == 'f':
             background = False
         else:
             background = True
-        p_cfg = PhenotypeModel.from_dict(request.get_json())
+        p_cfg = PhenotypeModel.from_json(data)
         tuple_def_docs = get_tuple_def(p_cfg)
         return json.dumps(post_phenotype(p_cfg, background=background, tuple_def_docs=tuple_def_docs), indent=4)
     except Exception as ex:
@@ -113,45 +144,45 @@ def phenotype():
         return 'Failed to load and insert phenotype. ' + str(ex), 400
 
 
-@phenotype_app.route("/nlpql", methods=["POST"])
-def nlpql():
+@phenotype_app.post("/nlpql")
+async def nlpql(
+    request: Request, 
+    source_id: Optional[str] = Query(None, alias="source_id"),
+    report_source: Optional[str] = Query(None, alias="report_source"),
+    background_str: str = Query("true")
+):
     """POST to run NLPQL phenotype"""
-    if request.method == 'POST' and request.data:
-        raw_nlpql = request.data.decode("utf-8")
+    try: 
+        raw_nlpql = await request.body()  # Get raw request body
+        raw_nlpql = raw_nlpql.decode("utf-8")  # Decode to UTF-8
+
         # modified_nlpql, tuple_def_docs = tuple_processor.modify_nlpql(raw_nlpql)
         # if tuple_def_docs is None:
         #     # tuple syntax error
         #     return 'Tuple syntax error'
 
-        try:
-            args = request.args
-            source_id = args.get("source_id", default="", type=str)
-            if source_id == '':
-                source_id = args.get("report_source", default="", type=str)
-        except Exception as ex:
-            log(ex)
-            source_id = None
+        if source_id == '': 
+            source_id = report_source
 
-        background_str = request.args.get('background', "true")
         if len(background_str) > 0 and (background_str[0]).lower() == 'f':
             background = False
         else:
             background = True
 
         return json.dumps(post_nlpql(raw_nlpql, source_id, background), indent=4)
+    except Exception as e: 
+        return "Please POST text containing NLPQL."
 
-    return "Please POST text containing NLPQL."
-    
 
-
-@phenotype_app.route('/pipeline', methods=['POST'])
-def pipeline():
+@phenotype_app.post('/pipeline')
+async def pipeline(request: Request):
     """POST a pipeline job (JSON) to run on the Luigi pipeline."""
-    if not request.data:
+    data = await request.json()
+    if not data:
         return 'POST a JSON pipeline config to execute or an id to GET. Body should be pipeline JSON'
     try:
         init()
-        p_cfg = PipelineConfig.from_dict(request.get_json())
+        p_cfg = PipelineConfig.from_dict(data)
         p_id = insert_pipeline_config(p_cfg, util.conn_string)
         if p_id == -1:
             return '{ "success", false }'
@@ -180,7 +211,7 @@ def pipeline():
         return 'Failed to load and insert pipeline. ' + str(ex), 400
 
 
-@phenotype_app.route('/pipeline_id/<int:pipeline_id>', methods=['GET'])
+@phenotype_app.get('/pipeline_id/<int:pipeline_id>')
 def pipeline_id(pipeline_id: int):
     """GET a pipeline JSON based on the pipeline_id"""
     try:
@@ -191,7 +222,7 @@ def pipeline_id(pipeline_id: int):
         return "Failed to eval pipeline" + str(ex)
 
 
-@phenotype_app.route('/phenotype_id/<int:phenotype_id>', methods=['GET'])
+@phenotype_app.get('/phenotype_id/<int:phenotype_id>')
 def phenotype_id(phenotype_id: int):
     """GET a pipeline JSON based on the phenotype_id"""
     try:
@@ -202,37 +233,35 @@ def phenotype_id(phenotype_id: int):
         return "Failed to eval phenotype" + str(ex)
 
 
-@phenotype_app.route("/nlpql_tester", methods=["POST"])
-def nlpql_tester():
-    if request.method == 'POST' and request.data:
-        raw_nlpql = request.data.decode("utf-8")
+@phenotype_app.post("/nlpql_tester")
+async def nlpql_tester(request: Request):
+    if request:
+        raw_nlpql = await request.body()  
+        raw_nlpql = raw_nlpql.decode("utf-8")  
         return parse_nlpql(raw_nlpql)
 
     return "Please POST text containing NLPQL."
 
 
-@phenotype_app.route("/nlpql_expander", methods=["POST"])
-def nlpql_expander():
+@phenotype_app.post("/nlpql_expander")
+async def nlpql_expander(request: Request):
     """POST to expand NLPQL termset macros"""
-    if request.method == 'POST' and request.data:
-        nlpql_results = expand_nlpql_macros(request.data.decode("utf-8"))
+    if request:
+        raw_nlpql = await request.body()  
+        raw_nlpql = raw_nlpql.decode("utf-8")  
+        nlpql_results = expand_nlpql_macros(raw_nlpql)
         return nlpql_results
 
     return "Please POST text containing NLPQL."
 
 
-@phenotype_app.route('/phenotype_jobs/<string:status_string>', methods=['GET'])
-def phenotype_jobs(status_string: str):
+@phenotype_app.get('/phenotype_jobs/<string:status_string>')
+def phenotype_jobs (status_string: str,
+    limit: int = Query(100),
+    skip: int = Query(0)
+):
     """GET a phenotype jobs JSON based on the job status"""
     try:
-        limit = request.args.get('limit', '100')
-        skip = request.args.get('skip', '0')
-        try:
-            limit = int(limit)
-            skip = int(skip)
-        except Exception as ex:
-            limit = 100
-            skip = 0
         p = query_phenotype_jobs(status_string, util.conn_string, limit=limit, skip=skip)
         return json.dumps(p, indent=4, sort_keys=True, default=str)
     except Exception as ex:
@@ -240,7 +269,7 @@ def phenotype_jobs(status_string: str):
         return "Failed: " + str(ex)
 
 
-@phenotype_app.route('/phenotype_job_by_id/<string:id>', methods=['GET'])
+@phenotype_app.get('/phenotype_job_by_id/<string:id>')
 def phenotype_job_by_id(id: str):
     """GET a phenotype jobs JSON by id"""
     try:
@@ -251,15 +280,14 @@ def phenotype_job_by_id(id: str):
         return "Failed: " + str(ex)
 
 
-@phenotype_app.route('/phenotype_paged_results/<int:job_id>/<string:phenotype_final_str>', methods=['GET'])
-def get_paged_phenotype_results(job_id: int, phenotype_final_str: str):
+@phenotype_app.get('/phenotype_paged_results/<int:job_id>/<string:phenotype_final_str>')
+def get_paged_phenotype_results(job_id: int, phenotype_final_str: str, last_id: str = Query('')):
     """GET paged phenotype results"""
     try:
         phenotype_final = False
         phenotype_final_str = str(phenotype_final_str).strip().lower()
         if phenotype_final_str == 't' or phenotype_final_str == 'true' or phenotype_final_str == 'yes':
             phenotype_final = True
-        last_id = request.args.get('last_id', '')
         res = paged_phenotype_results(str(job_id), phenotype_final, last_id)
 
         return json.dumps(res, indent=4, default=str)
@@ -268,7 +296,7 @@ def get_paged_phenotype_results(job_id: int, phenotype_final_str: str):
         return "Failed: " + str(e)
 
 
-@phenotype_app.route('/phenotype_subjects/<int:job_id>/<string:phenotype_final_str>', methods=['GET'])
+@phenotype_app.get('/phenotype_subjects/<int:job_id>/<string:phenotype_final_str>')
 def get_phenotype_subjects(job_id: int, phenotype_final_str: str):
     """GET phenotype_subjects"""
     try:
@@ -284,7 +312,7 @@ def get_phenotype_subjects(job_id: int, phenotype_final_str: str):
         return "Failed: " + str(e)
 
 
-@phenotype_app.route('/phenotype_subject_results/<int:job_id>/<string:phenotype_final_str>/<string:subject>', methods=['GET'])
+@phenotype_app.get('/phenotype_subject_results/<int:job_id>/<string:phenotype_final_str>/<string:subject>')
 def get_phenotype_subject_results(job_id: int, phenotype_final_str, subject: str):
     """GET phenotype results for a given subject"""
     try:
@@ -300,7 +328,7 @@ def get_phenotype_subject_results(job_id: int, phenotype_final_str, subject: str
         return "Failed: " + str(e)
 
 
-@phenotype_app.route('/phenotype_result_by_id/<string:id>', methods=['GET'])
+@phenotype_app.get('/phenotype_result_by_id/<string:id>')
 def get_phenotype_result_by_id(id: str):
     """GET phenotype result for a given mongo identifier"""
     try:
@@ -312,7 +340,7 @@ def get_phenotype_result_by_id(id: str):
         return "Failed: " + str(e)
 
 
-@phenotype_app.route('/phenotype_structure/<int:id>', methods=['GET'])
+@phenotype_app.get('/phenotype_structure/<int:id>')
 def get_phenotype_structure(id: int):
     """GET phenotype structure parsed out"""
     try:
@@ -324,7 +352,7 @@ def get_phenotype_structure(id: int):
         return "Failed: " + str(e)
 
 
-@phenotype_app.route('/phenotype_feature_results/<int:job_id>/<string:feature>/<string:subject>', methods=['GET'])
+@phenotype_app.get('/phenotype_feature_results/<int:job_id>/<string:feature>/<string:subject>')
 def get_phenotype_feature_results(job_id: int, feature: str, subject: str):
     """GET phenotype results for a given feature"""
     try:
@@ -336,7 +364,7 @@ def get_phenotype_feature_results(job_id: int, feature: str, subject: str):
         return "Failed: " + str(e)
 
 
-@phenotype_app.route('/phenotype_results_by_id/<string:ids>', methods=['GET'])
+@phenotype_app.get('/phenotype_results_by_id/<string:ids>')
 def get_phenotype_results_by_id(ids: str):
     """GET phenotype results for a comma-separated list of ids"""
     try:
@@ -352,17 +380,18 @@ def get_phenotype_results_by_id(ids: str):
 # LIBRARY ENDPOINTS
 
 
-@phenotype_app.route("/add_query", methods=["POST"])
-def addQuery():
+@phenotype_app.post("/add_query")
+async def addQuery(request: Request):
     """POST to add NLPQL to library"""
-    if request.method == 'POST' and request.data:
-        raw_nlpql = request.data.decode("utf-8")
+    if request:
+        body = await request.body()
+        raw_nlpql = body.decode("utf-8")
         nlpql_results = run_nlpql_parser(raw_nlpql)
         if nlpql_results['has_errors'] or nlpql_results['has_warnings']:
             return json.dumps(nlpql_results)
         else:
             p_cfg = nlpql_results['phenotype']
-            nlpql_json = p_cfg.to_json()
+            nlpql_json = p_cfg # might need to add tojson TODO
             nlpql_name = p_cfg.name
             nlpql_version = p_cfg.phenotype['version']
             try:
@@ -375,17 +404,14 @@ def addQuery():
     return "Please POST text containing NLPQL."
 
 
-@phenotype_app.route('/get_query/<int:query_id>', methods=["GET"])
+@phenotype_app.get('/get_query/<int:query_id>')
 def get_query_by_id(query_id: int):
     """Get NLPQL by ID from NLPQL Library"""
-    if request.method == 'GET':
-        query = library.get_query(str(query_id), util.conn_string)
-        return json.dumps(query, indent=4, sort_keys=True, default=str)
-    else:
-        return Response('Only GET requests are supported', status=400, mimetype='application/json')
+    query = library.get_query(str(query_id), util.conn_string)
+    return json.dumps(query, indent=4, sort_keys=True, default=str)
 
 
-@phenotype_app.route('/delete_query/<int:query_id>', methods=["GET"])
+@phenotype_app.get('/delete_query/<int:query_id>')
 def delete_query_by_id(query_id: int):
     flag = library.delete_query(str(query_id), util.conn_string)
     if flag == 1:

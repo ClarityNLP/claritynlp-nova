@@ -78,10 +78,12 @@ if __name__ == '__main__':
         sys.exit(0)
     
     import segmentation_helper as seg_helper
+    DISPLAY = print
+    
 else:
     from algorithms.segmentation import segmentation_helper as seg_helper
-
-from claritynlp_logging import log, ERROR, DEBUG
+    from claritynlp_logging import log, ERROR, DEBUG
+    DISPLAY = log
 
 
 _VERSION_MAJOR = 0
@@ -95,17 +97,17 @@ _loading_status = 'none'
 ###############################################################################
 def segmentation_init(tries=0):
     if tries > 0:
-        log('Retrying, try%d' % tries)
+        DISPLAY('Retrying, try%d' % tries)
 
     global _loading_status
     if _loading_status == 'none' and 'nlp' not in _data:
         try:
-            log('Segmentation init...')
+            DISPLAY('Segmentation init...')
             _loading_status = 'loading'
             _data['nlp'] = english_model.load()
             _loading_status = 'done'
         except Exception as exc:
-            log(exc, ERROR)
+            DISPLAY(exc, ERROR)
             _loading_status = 'none'
     elif _loading_status == 'loading' and tries < 30:
         time.sleep(10)
@@ -259,7 +261,7 @@ if __name__ == '__main__':
         infile = open(json_file, 'rt')
         file_data = json.load(infile)
     except:
-        log("Could not open file {0}.".format(json_file))
+        DISPLAY("Could not open file {0}.".format(json_file))
         sys.exit(-1)
 
     infile.close()

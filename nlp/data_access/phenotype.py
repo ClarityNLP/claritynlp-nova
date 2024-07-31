@@ -109,7 +109,7 @@ class PhenotypeModel(BaseModel):
                  code_systems: list = None, value_sets: list = None, term_sets: list = None,
                  document_sets: list = None, data_entities: list = None, cohorts: list = None,
                  operations: list = None, debug=False, limit: int = 0, nlpql: str = '',
-                 phenotype_id=1, valid=True, tuples: list = None):
+                 phenotype_id=1, valid=True, tuples: list = None, reports: list = None, report_source: str = ''):
         self.owner = owner
         self.name = name
         self.description = description
@@ -158,10 +158,16 @@ class PhenotypeModel(BaseModel):
             self.tuples = list()
         else:
             self.tuples = tuples
+
+        if reports is None:
+            self.reports = list()
+        else:
+            self.reports = reports
         self.debug = debug
         self.limit = limit
         self.nlpql = nlpql
         self.phenotype_id = phenotype_id
+        self.report_source = report_source
 
 
 def insert_phenotype_mapping(phenotype_id, pipeline_id, connection_string):
