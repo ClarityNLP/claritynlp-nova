@@ -258,6 +258,9 @@ def _fix_broken_tokens(sentence_list):
         s2 = sentence_list[i+1]
         if s1.endswith('&') and s2.startswith('&'):
             broken_list.append(i)
+        elif s1.endswith(_DELIMITER) and s2.startswith('ANON'):
+            # anon token was incorrectly split
+            broken_list.append(i)            
         else:
             if s2.startswith(_DELIMITER):
                 match = re.search(r'&&[A-Z]+\d\d\d\d\Z', s1)
