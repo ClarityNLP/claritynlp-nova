@@ -39,11 +39,11 @@ except Exception as e:
     import lab_value_matcher as lvm
 
 _VERSION_MAJOR = 0
-_VERSION_MINOR = 9
+_VERSION_MINOR = 10
 _MODULE_NAME = 'segmentation_helper.py'
 
 # set to True to enable debug output
-_TRACE = False
+_TRACE = True
 
 # regex for locating an anonymized item [** ... **]
 _str_anon = r'\[\*\*[^\]]+\]'
@@ -257,6 +257,9 @@ def _fix_broken_tokens(sentence_list):
         s1 = sentence_list[i]
         s2 = sentence_list[i+1]
         if s1.endswith('&') and s2.startswith('&'):
+            broken_list.append(i)
+        elif s1.endswith(_DELIMITER) and s2.startswith('ANON'):
+            # anon token was incorrectly split
             broken_list.append(i)
         else:
             if s2.startswith(_DELIMITER):
