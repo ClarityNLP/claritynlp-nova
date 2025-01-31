@@ -43,7 +43,7 @@ _VERSION_MINOR = 10
 _MODULE_NAME = 'segmentation_helper.py'
 
 # set to True to enable debug output
-_TRACE = True
+_TRACE = False
 
 # regex for locating an anonymized item [** ... **]
 _str_anon = r'\[\*\*[^\]]+\]'
