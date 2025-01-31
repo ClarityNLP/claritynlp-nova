@@ -6,6 +6,7 @@ antlr4-python3-runtime
 flask
 flask-cors
 luigi
+pip
 pymongo
 psycopg2
 pytest
@@ -14,3 +15,4 @@ inflect==7.0.0
 pandas
 cachetools
 simplejson
+openai
