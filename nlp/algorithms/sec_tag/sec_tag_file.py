@@ -37,14 +37,14 @@ regex_multi_newline = re.compile(r'\n+')
 
 ###############################################################################
 def show_help():
-    log ("""\nUsage: python3 ./sec_tag_file.py <report_file.json> [report_count] """)
-    log()
-    log("\tThe 'report_file' argument is required, must be JSON format.")
-    log("\tUse 'report_count' to limit the number of reports processed, must be an integer.")
-    log()
-    log("\tFor example, to process 15 reports:")
-    log("\n\t\tpython3 ./sec_tag_file reports.json 15")
-    log()
+    print("""\nUsage: python3 ./sec_tag_file.py <report_file.json> [report_count] """)
+    print()
+    print("\tThe 'report_file' argument is required, must be JSON format.")
+    print("\tUse 'report_count' to limit the number of reports processed, must be an integer.")
+    print()
+    print("\tFor example, to process 15 reports:")
+    print("\n\t\tpython3 ./sec_tag_file reports.json 15")
+    print()
 
 ###############################################################################
 if __name__ == '__main__':
