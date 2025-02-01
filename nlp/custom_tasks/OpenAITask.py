@@ -4,6 +4,9 @@ Custom task for sending queries to an OpenAI-compatible LLM.
 
 Sample NLPQL:
 
+
+limit 1;
+
 phenotype "OpenAI Task" version "1";
 include ClarityCore version "1.0" called Clarity;
 
@@ -14,16 +17,15 @@ Clarity.createDocumentSet({
 
 define OpenAITest:
     Clarity.OpenAITask({
-        documentset   : [MyDocs],
-        "llm_id"      : "GLADOS_LLAMA_3.3",
-        "confirm_id"  : "GLADOS_NVLM",
-        "api_key"     : "GLADOS_KEY",
-        "user_prompt" : "Extract { \"measurement\" : \"the measurement text\", \"entity\" : \"the entity to which the measurement applies\" } for each measurement in the following text: "
+        documentset         : [MyDocs],
+        "llm_id"            : "GLADOS_LLAMA_3.3",
+        "confirm_id"        : "GLADOS_NVLM",
+        "api_key"           : "GLADOS_KEY",
+        "user_prompt"       : "Extract { \"measurement\" : \"the measurement text\", \"entity\" : \"the entity to which the measurement applies\" } for each measurement in the following text: ",
+        "validation_prompt" : "Respond with {{\"is_valid\" : \"TRUE or FALSE\"}} if {entity} has dimensions {meas_str} in the following text: {sentence}"
     });
 
 context Patient;
-
-
 
 
 """
@@ -264,23 +266,8 @@ class OpenAITask(BaseTask):
 
                     # mongo result object
                     obj = {
-                        'sentence' : sentence, #doc['report_text'],
+                        'sentence' : sentence,
                         'value' : item
                     }
                     self.write_result_data(temp_file, mongo_client, doc, obj)
-
-                # # find each group of {...} pairs
-                # iterator = re.finditer(r'\{[^}]*\}', result_str, re.IGNORECASE)
-                # for match in iterator:
-                #     # result should be a JSON string
-                #     json_str = match.group()
-
-                #     # mongo result object
-                #     obj = {
-                #         'document' : doc['report_text'],
-                #         'value'    : json_str
-                #     }
-                #     #log(obj)
-
-                #     self.write_result_data(temp_file, mongo_client, doc, obj)
 
