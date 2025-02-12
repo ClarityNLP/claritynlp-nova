@@ -4,7 +4,7 @@ from os import environ, getenv, path
 import redis
 from pymongo import MongoClient
 
-from claritynlp_logging import ERROR, log
+from claritynlp_logging import DEBUG, ERROR, log
 
 SCRIPT_DIR = path.dirname(__file__)
 config = configparser.RawConfigParser()
@@ -30,7 +30,7 @@ def read_property(env_name, config_tuple, default="", key_name=None):
         if len(key_name) > 0 and "PASSWORD" not in key_name and "KEY" not in key_name and "USERNAME" not in key_name:
             properties[key_name] = property_name
     except Exception:
-        log(f"Variable {key_name} is not set, setting to default of {default}")
+        log(f"Variable {key_name} is not set, setting to default of {default}", level=DEBUG)
         properties[key_name] = default
     return property_name
 
@@ -51,7 +51,6 @@ def read_boolean_property(prop, default=False):
         val = default
     return val
 
-
 conn_string = "host='%s' dbname='%s' user='%s' password='%s' port=%s" % (
     read_property("NLP_PG_HOSTNAME", ("pg", "host")),
     read_property("NLP_PG_DATABASE", ("pg", "dbname")),
@@ -61,7 +60,7 @@ conn_string = "host='%s' dbname='%s' user='%s' password='%s' port=%s" % (
 )
 
 mongo_host = read_property("NLP_MONGO_HOSTNAME", ("mongo", "host"))
-mongo_port = read_property("NLP_MONGO_CONTAINER_PORT", ("mongo", "port"), "23017")
+mongo_port = read_property("NLP_MONGO_CONTAINER_PORT", ("mongo", "port"), "27017")
 mongo_port = int(mongo_port) if isinstance(mongo_port, str) else mongo_port
 mongo_db = read_property("NLP_MONGO_DATABASE", ("mongo", "db"))
 mongo_working_index = read_property("NLP_MONGO_WORKING_INDEX", ("mongo", "working_index"))
@@ -193,7 +192,7 @@ def cmp_2_key(mycmp):
     return K
 
 
-def mongo_client(host: str | None, port: int | None, username: str | None, password: str | None):
+def mongo_client(host: str | None = None, port: int | None = None, username: str | None = None, password: str | None = None):
     if not host and mongo_host:
         host = mongo_host
 
