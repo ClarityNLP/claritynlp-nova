@@ -17,4 +17,3 @@ simplejson==3.19.3
 sly==0.4
 spacy==3.7.3
 typing-extensions==4.11.0
->>>>>>> develop
