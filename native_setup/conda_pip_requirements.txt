@@ -1,4 +1,4 @@
-antlr4-tools
-ilock
-redis
+antlr4-tools==0.2.1
+ilock==1.0.3
+redis==5.2.1
 text-generation==0.7.0

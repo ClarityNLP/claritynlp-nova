@@ -1,11 +1,13 @@
 from flask import request, Blueprint
 from luigi_tools import phenotype_helper, luigi_runner
+from data_access import memory_data
 from data_access import *
 from algorithms import *
 from nlpql import *
 from apis.api_helpers import init
 from tasks import register_tasks, registered_pipelines, registered_collectors
 from claritynlp_logging import log, ERROR, DEBUG
+import util
 
 
 register_tasks()
@@ -35,6 +37,14 @@ def post_phenotype(p_cfg: PhenotypeModel, raw_nlpql: str = '', background=False,
                                              date_started=datetime.now(),
                                              job_type='PHENOTYPE'), util.conn_string)
 
+    if p_cfg.reports and len(p_cfg.reports) > 0:
+        util.solr_url = memory_data.IN_MEMORY_DATA
+        memory_data.load_buffer(str(job_id), p_cfg.reports)
+        p_cfg.report_source = str(job_id)
+    elif p_cfg.report_source and len(p_cfg.report_source) > 0:
+        # assumes memory data already loaded
+        util.solr_url = memory_data.IN_MEMORY_DATA
+
     if tuple_def_docs is not None and len(tuple_def_docs) > 0:
         # insert tuple def docs into Mongo
         client = util.mongo_client()
@@ -45,7 +55,7 @@ def post_phenotype(p_cfg: PhenotypeModel, raw_nlpql: str = '', background=False,
             log('inserted {0} tuple definition docs for job_id {1}'.format(len(tuple_def_docs), job_id))
         else:
             log('failed to insert {0} tuple definition docs for job_id {1}'.format(len(tuple_def_docs), job_id))
-        
+
     pipeline_ids = luigi_runner.run_phenotype(p_cfg, p_id, job_id, background=background)
     pipeline_urls = ["%s/pipeline_id/%s" %
                      (util.main_url, str(pid)) for pid in pipeline_ids]
@@ -141,7 +151,7 @@ def nlpql():
         return json.dumps(post_nlpql(raw_nlpql, source_id, background), indent=4)
 
     return "Please POST text containing NLPQL."
-    
+
 
 
 @phenotype_app.route('/pipeline', methods=['POST'])

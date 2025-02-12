@@ -30,3 +30,4 @@ certs/claritynlp.*
 certs/localhost*
 certs/rootCA*
 docker-compose.rancher*
+.vscode
