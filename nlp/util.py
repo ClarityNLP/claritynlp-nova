@@ -192,7 +192,10 @@ def cmp_2_key(mycmp):
     return K
 
 
-def mongo_client(host: str | None = None, port: int | None = None, username: str | None = None, password: str | None = None):
+def mongo_client(host: str | None = None,
+                 port: int | None = None,
+                 username: str | None = "",
+                 password: str | None = ""):
     if not host and mongo_host:
         host = mongo_host
 
@@ -205,7 +208,12 @@ def mongo_client(host: str | None = None, port: int | None = None, username: str
     if not password and mongo_password:
         password = mongo_password
 
-    if not host or not port or not username or not password:
+    #log('    mongo host: ->{0}<-'.format(host))
+    #log('    mongo port: ->{0}<-'.format(port))
+    #log('mongo username: ->{0}<-'.format(username))
+    #log('mongo password: ->{0}<-'.format(password))
+        
+    if not host or not port:# or not username or not password:
         log("Missing required parameter for mMngo connection string", level=ERROR)
         raise Exception("Missing a required parameter for the Mongo connection string")
 
