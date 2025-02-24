@@ -1,7 +1,7 @@
 FROM condaforge/mambaforge
 
 ARG NLP_API_CONTAINER_PORT
-ENV APP_HOME=/api
+ENV APP_HOME=/nlp
 RUN mkdir $APP_HOME
 WORKDIR $APP_HOME
 
