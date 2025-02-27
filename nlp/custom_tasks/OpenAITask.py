@@ -22,11 +22,18 @@ define OpenAITest:
         "confirm_id"        : "GLADOS_NVLM",
         "api_key"           : "GLADOS_KEY",
         "user_prompt"       : "Extract { \"measurement\" : \"the measurement text\", \"entity\" : \"the entity to which the measurement applies\" } for each measurement in the following text: ",
-        "validation_prompt" : "Respond with {{\"is_valid\" : \"TRUE or FALSE\"}} if {entity} has dimensions {measurement} in the following text: {sentence}"
+        "validation_prompt" : "Respond with {{\"is_valid\" : \"TRUE or FALSE\"}} if {entity} has dimensions {measurement} in the following text: {sentence}",
+        "sentence_or_doc"   : "sentence",
     });
 
 context Patient;
 
+
+The validation prompt must be present if the optional "confirm_id" param is present.
+
+The 'sentence_or_doc' param is optional. It specifies whether to send sentences or entire documents
+to the LLM for processing. Documents will be processed if this string param begins with the letter 'd',
+otherwise sentences will be processed.
 
 """
 
@@ -75,7 +82,7 @@ if 0 == len(_llm_dict):
 
 log('OpenAITask: found {0} LLMs in LLM config file.'.format(len(_llm_dict)))
 
-_IGNORE_PARAMS = {'sentence', 'doc'}
+_IGNORE_PARAMS = {'sentence', 'doc', 'document'}
 
 
 ###############################################################################
@@ -112,7 +119,19 @@ class OpenAITask(BaseTask):
 
         user_param_set = set()
         validation_param_set = set()
-        
+
+        # whether to process sentences or entire docs at a time
+        # (sentences are the default)
+        process_sentences = True
+        if 'sentence_or_doc' in self.pipeline_config.custom_arguments:
+            sentence_or_doc = self.pipeline_config.custom_arguments['sentence_or_doc']
+            if len(sentence_or_doc) > 0:
+                sentence_or_doc = sentence_or_doc.lower()
+                if sentence_or_doc.startswith('d'):
+                    process_sentences = False
+
+        log('OpenAITask: process_sentences = "{0}"'.format(process_sentences))
+                    
         # llm_id is required - this is an ID from the LLM config file
         if 'llm_id' in self.pipeline_config.custom_arguments:
             llm_id = self.pipeline_config.custom_arguments['llm_id']
@@ -217,9 +236,14 @@ class OpenAITask(BaseTask):
             # all sentences in this document
             sentence_list = self.get_document_sentences(doc)
 
-            for sentence in sentence_list:
+            if process_sentences:
+                input_text_list = sentence_list
+            else:
+                input_text_list = [self.get_document_text(doc)]
             
-                content_str = """{0}\n{1}""".format(user_prompt, sentence)
+            for input_text in input_text_list:
+            
+                content_str = """{0}\n{1}""".format(user_prompt, input_text)
 
                 user_msg = {
                     "role": "user",
@@ -297,9 +321,11 @@ class OpenAITask(BaseTask):
                             if param in llm_response:
                                 kwargs[param] = llm_response[param]
                             elif 'sentence' == param:
-                                kwargs['sentence'] = sentence
+                                kwargs['sentence'] = input_text
                             elif 'doc' == param:
-                                kwargs['doc'] = doc
+                                kwargs['doc'] = input_text
+                            elif 'document' == param:
+                                kwargs['document'] = input_text
                             else:
                                 log('OpenAITask: validation param "{0}" not found in LLM response.'.format(param))
                                 params_ok = False
@@ -323,9 +349,16 @@ class OpenAITask(BaseTask):
                 for item in result_dict_list:
 
                     # mongo result object
-                    obj = {
-                        'sentence' : sentence,
-                        'value' : item
-                    }
+                    if process_sentences:
+                        obj = {
+                            'sentence' : input_text,
+                            'value' : item
+                        }
+                    else:
+                        obj = {
+                            'document' : input_text,
+                            'value' : item
+                        }
+                        
                     self.write_result_data(temp_file, mongo_client, doc, obj)
 
