@@ -2,6 +2,8 @@ import configparser
 from os import environ, getenv, path
 
 import redis
+from bson import ObjectId
+from flask.json.provider import DefaultJSONProvider
 from pymongo import MongoClient
 
 from claritynlp_logging import DEBUG, ERROR, log
@@ -212,7 +214,7 @@ def mongo_client(host: str | None = None,
     #log('    mongo port: ->{0}<-'.format(port))
     #log('mongo username: ->{0}<-'.format(username))
     #log('mongo password: ->{0}<-'.format(password))
-        
+
     if not host or not port:# or not username or not password:
         log("Missing required parameter for mMngo connection string", level=ERROR)
         raise Exception("Missing a required parameter for the Mongo connection string")
@@ -225,3 +227,13 @@ def mongo_client(host: str | None = None,
         # print('unauthenticated mongo')
         _mongo_client = MongoClient(host, port)
     return _mongo_client
+
+
+class MongoJSONProvider(DefaultJSONProvider):
+    def __init__(self, app):
+        super().__init__(app)
+
+    def default(self, o):
+        if isinstance(o, ObjectId):
+            return str(o)
+        return super().default(o)

@@ -27,6 +27,7 @@ def create_app(config_filename=None):
 # needs to be visible to Flask via import
 application = create_app()
 CORS(application)
+application.json = util.MongoJSONProvider(application)
 
 if __name__ == '__main__':
     log('starting claritynlp api...')
