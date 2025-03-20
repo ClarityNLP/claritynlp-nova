@@ -81,17 +81,17 @@ def display_mapping(x):
     return x
 
 
-def job_results(job_type: str, job: str):
+def job_results(job_type: str, job: str, format_type: str):
     if job_type == 'pipeline':
-        return pipeline_results(job)
+        return pipeline_results(job, format_type)
     elif job_type == 'phenotype' or job_type == 'cohort':
-        return phenotype_results(job)
+        return phenotype_results(job, format_type)
     elif job_type == 'phenotype_intermediate' or job_type == 'features':
-        return phenotype_intermediate_results(job)
+        return phenotype_intermediate_results(job, format_type)
     elif job_type == 'annotations':
-        return phenotype_feedback_results(job)
+        return phenotype_feedback_results(job, format_type)
     else:
-        return generic_results(job, job_type)
+        return generic_results(job, job_type, format_type=format_type)
 
 
 def phenotype_performance_results(jobs: list):
@@ -187,20 +187,40 @@ def phenotype_feedback_results(job: str):
     return filename
 
 
-def pipeline_results(job: str):
+def pipeline_results(job: str, format_type: str):
     client = util.mongo_client()
-    today = datetime.today().strftime('%m_%d_%Y_%H%M')
-    filename = '/tmp/job%s_pipeline_%s.csv' % (job, today)
-
     db = client[util.mongo_db]
-
+    header_values: list[str] = pipeline_output_positions
     try:
+        if format_type == "json":
+            header_complete = False
+            output_docs: list[dict] = []
+
+            for res in db.pipeline_results.find({"job_id": int(job)}):
+                tmp_res_dict = {}
+                keys = list(res.keys())
+                if not header_complete:
+                    new_cols = []
+                    for k in keys:
+                        if k not in header_values:
+                            new_cols.append(k)
+                    new_cols = sorted(new_cols)
+                    header_values.extend(new_cols)
+
+                for key in header_values:
+                    if key in keys:
+                        tmp_res_dict[key] = res[key]
+                output_docs.append(tmp_res_dict)
+            return output_docs
+
+        today = datetime.today().strftime('%m_%d_%Y_%H%M')
+        filename = '/tmp/job%s_pipeline_%s.csv' % (job, today)
+
         with open(filename, 'w', newline='') as csvfile:
             csv_writer = csv.writer(csvfile, delimiter=util.delimiter, quotechar=util.quote_character,
                                     quoting=csv.QUOTE_MINIMAL)
 
             header_written = False
-            header_values = pipeline_output_positions
             length = 0
             for res in db.pipeline_results.find({"job_id": int(job)}):
                 keys = list(res.keys())
@@ -232,12 +252,12 @@ def pipeline_results(job: str):
     return filename
 
 
-def phenotype_results(job: str):
-    return generic_results(job, 'phenotype', True)
+def phenotype_results(job: str, format_type: str):
+    return generic_results(job, 'phenotype', True, format_type=format_type)
 
 
-def phenotype_intermediate_results(job: str):
-    return generic_results(job, 'phenotype', False)
+def phenotype_intermediate_results(job: str, format_type: str):
+    return generic_results(job, 'phenotype', False, format_type=format_type)
 
 
 def get_columns(db, job: str, job_type: str, phenotype_final: bool):
@@ -256,25 +276,41 @@ def get_columns(db, job: str, job_type: str, phenotype_final: bool):
     return list(set(cols))
 
 
-def generic_results(job: str, job_type: str, phenotype_final: bool = False):
+def generic_results(job: str, job_type: str, phenotype_final: bool = False, format_type: str = 'csv'):
     client = util.mongo_client()
     db = client[util.mongo_db]
-    today = datetime.today().strftime('%m_%d_%Y_%H%M')
-    filename = '/tmp/job%s_%s_%s.csv' % (job, job_type, today)
+
+    if job_type == 'phenotype':
+        query = {"job_id": int(job), "phenotype_final": phenotype_final}
+    else:
+        query = {"job_id": int(job)}
+
     try:
+        query_results = db[job_type + "_results"].find(query)
+        columns = sorted(get_columns(db, job, job_type, phenotype_final))
+
+        if format_type == "json":
+            output_docs: list[dict] = []
+
+            for res in query_results:
+                tmp_output_dict = {}
+                keys = list(res.keys())
+                for key in columns:
+                    if key in keys:
+                        tmp_output_dict[key] = res[key]
+                output_docs.append(tmp_output_dict)
+
+            return output_docs
+
+        today = datetime.today().strftime('%m_%d_%Y_%H%M')
+        filename = '/tmp/job%s_%s_%s.csv' % (job, job_type, today)
         with open(filename, 'w', newline='') as csvfile:
             csv_writer = csv.writer(csvfile, delimiter=util.delimiter, quotechar=util.quote_character,
                                     quoting=csv.QUOTE_MINIMAL)
 
             header_written = False
             length = 0
-            if job_type == 'phenotype':
-                query = {"job_id": int(job), "phenotype_final": phenotype_final}
-            else:
-                query = {"job_id": int(job)}
 
-            query_results = db[job_type + "_results"].find(query)
-            columns = sorted(get_columns(db, job, job_type, phenotype_final))
             for res in query_results:
                 keys = list(res.keys())
                 if not header_written:

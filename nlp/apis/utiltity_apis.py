@@ -1,5 +1,5 @@
 import simplejson
-from flask import send_file, Blueprint, Response, request
+from flask import send_file, Blueprint, Response, request, jsonify
 from os import listdir
 from os.path import isfile, join
 from claritynlp_logging import log, ERROR, DEBUG
@@ -55,10 +55,14 @@ def delete_job_by_id(job_id: int):
 
 @utility_app.route('/job_results/<int:job_id>/<string:job_type>', methods=['GET'])
 def get_job_results(job_id: int, job_type: str):
-    """GET job results as CSV"""
+    """GET job results as CSV or JSON"""
+    format_type = request.args.get('format', 'csv')
     try:
-        job_output = job_results(job_type, str(job_id))
-        return send_file(job_output)
+        job_output = job_results(job_type, str(job_id), format_type)
+        if isinstance(job_output, str): # CSV format type
+            return send_file(job_output)
+        elif isinstance(job_output, list): # JSON format type
+            return jsonify(job_output)
     except Exception as ex:
         return "Failed to get job results" + str(ex)
 
