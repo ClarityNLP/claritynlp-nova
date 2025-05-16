@@ -46,6 +46,7 @@ from pymongo import MongoClient
 from json.decoder import JSONDecodeError
 from tasks.task_utilities import BaseTask
 from claritynlp_logging import ERROR, log
+from util import default_llm_id
 
 from openai import OpenAI
 
@@ -132,8 +133,8 @@ class OpenAITask(BaseTask):
         log('OpenAITask: process_sentences = "{0}"'.format(process_sentences))
 
         # llm_id is required - this is an ID from the LLM config file
-        if 'llm_id' in self.pipeline_config.custom_arguments:
-            llm_id = self.pipeline_config.custom_arguments['llm_id']
+        if 'llm_id' in self.pipeline_config.custom_arguments or default_llm_id:
+            llm_id: str | None = self.pipeline_config.custom_arguments['llm_id'] if "llm_id" in self.pipeline_config.custom_arguments else default_llm_id
             if llm_id in _llm_dict:
                 params = _llm_dict[llm_id]
             else:
@@ -146,6 +147,8 @@ class OpenAITask(BaseTask):
             log('*** OpenAITask argument "llm_id" is required. ***', ERROR)
             self.write_log_data('Failure', 'OpenAITask required argument "llm_id" not found.')
             return
+
+        log(f"*** Using llm_id {llm_id}***")
 
         if 'api_key' in self.pipeline_config.custom_arguments:
             api_key = self.pipeline_config.custom_arguments['api_key']

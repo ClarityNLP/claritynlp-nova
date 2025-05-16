@@ -118,6 +118,8 @@ fhir_terminology_user_password = read_property("FHIR_TERMINOLOGY_USER_PASSWORD",
 
 llm_api_url = read_property("LLM_API_URL", ("local", "llm_api_url"), key_name="llm_api_url")
 
+default_llm_id = read_property("DEFAULT_LLM_ID", ("local", "default_llm_id"), key_name="default_llm_id")
+
 # TODO this out a bit more, this is more for experimental evaluation
 cache_counts = {"compute": 0, "query": 0}
 
