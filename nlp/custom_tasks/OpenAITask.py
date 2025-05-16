@@ -42,7 +42,6 @@ import re
 import sys
 import json
 import errno
-from typing import Any
 from pymongo import MongoClient
 from json.decoder import JSONDecodeError
 from tasks.task_utilities import BaseTask
@@ -90,7 +89,7 @@ def response_is_valid(validation_openai_client,
                       validation_model_name,
                       validation_str,
                       **kwargs):
-    
+
     completion = validation_openai_client.chat.completions.create(
         model = validation_model_name,
         messages=[
@@ -104,7 +103,7 @@ def response_is_valid(validation_openai_client,
             }
         ], temperature = 0.05
     )
-    
+
     result_str = completion.choices[0].message.content
     obj = json.loads(result_str)
     assert 'is_valid' in obj
@@ -131,7 +130,7 @@ class OpenAITask(BaseTask):
                     process_sentences = False
 
         log('OpenAITask: process_sentences = "{0}"'.format(process_sentences))
-                    
+
         # llm_id is required - this is an ID from the LLM config file
         if 'llm_id' in self.pipeline_config.custom_arguments:
             llm_id = self.pipeline_config.custom_arguments['llm_id']
@@ -156,12 +155,12 @@ class OpenAITask(BaseTask):
             if llm_token is None:
                 # no environment variable has this name, so use the string directly
                 llm_token = api_key
-        
+
         if 'system_prompt' in self.pipeline_config.custom_arguments:
             system_prompt = self.pipeline_config.custom_arguments['system_prompt']
         else:
             system_prompt = "Provide accurate and concise answers in JSON format with no extraneous information."
-        
+
         if 'user_prompt' in self.pipeline_config.custom_arguments:
             user_prompt = self.pipeline_config.custom_arguments['user_prompt']
 
@@ -172,11 +171,11 @@ class OpenAITask(BaseTask):
                 user_param_set.add(user_param)
 
             log('OpenAITask user_param_set: "{0}"'.format(user_param_set))
-                
-                
+
+
         else:
             log('*** OpenAITask argument "user_prompt" is required. ***', ERROR)
-            self.write_log_data_('Failure', 'OpenAITask required argument "user_prompt" not found.')
+            self.write_log_data('Failure', 'OpenAITask required argument "user_prompt" not found.')
             return
 
         confirm_result = False
@@ -190,13 +189,13 @@ class OpenAITask(BaseTask):
                 return
 
             # the "validation_prompt" argument must also be present
-            if not 'validation_prompt' in self.pipeline_config.custom_arguments:
+            if 'validation_prompt' not in self.pipeline_config.custom_arguments:
                 log('*** OpenAITask: required "validation_prompt" NLPQL parameter not found. ***', ERROR)
                 self.write_log_data('Failure', 'OpenAITask validation prompt not found.')
                 return
 
             validation_prompt = self.pipeline_config.custom_arguments['validation_prompt']
-            
+
             confirm_model_name = confirm_params['name']
             confirm_base_url = confirm_params['base_url']
             confirm_result = True
@@ -215,40 +214,29 @@ class OpenAITask(BaseTask):
             for param in validation_param_set:
                 if param in _IGNORE_PARAMS:
                     continue
-                if not param in user_param_set:
+                if param not in user_param_set:
                     log('*** OpenAITask: validation param "{0}" not present in user prompt. ***'.format(param))
                     params_ok = False
 
             if not params_ok:
                 return
-            
-            
+
         # connect to the LLM
         openai_client = OpenAI(api_key = llm_token, base_url = base_url)
 
         # connect to the confirmation LLM if requested
         if confirm_result:
             confirm_client = OpenAI(api_key = llm_token, base_url = confirm_base_url)
-            
-        
-        for doc in self.docs:
 
+        for doc in self.docs:
             # all sentences in this document
             sentence_list = self.get_document_sentences(doc)
 
-            if process_sentences:
-                input_text_list = sentence_list
-            else:
-                input_text_list = [self.get_document_text(doc)]
-            
-            for input_text in input_text_list:
-            
-                content_str = """{0}\n{1}""".format(user_prompt, input_text)
+            input_text_list = sentence_list if process_sentences else [self.get_document_text(doc)]
 
-                user_msg = {
-                    "role": "user",
-                    "content": content_str
-                }
+            for input_text in input_text_list:
+
+                content_str = """{0}\n{1}""".format(user_prompt, input_text)
 
                 completion = openai_client.chat.completions.create(
                     model = name,
@@ -257,11 +245,18 @@ class OpenAITask(BaseTask):
                             "role": "system",
                             "content": "{0}".format(system_prompt)
                         },
-                        user_msg
+                        {
+                            "role": "user",
+                            "content": content_str
+                        }
                     ]
                 )
 
                 result_str = completion.choices[0].message.content
+
+                # Move on if no result
+                if not result_str:
+                    return
 
                 # list of LLM responses, each of which should be a dict
                 result_dict_list = []
@@ -272,20 +267,21 @@ class OpenAITask(BaseTask):
                 test_str = result_str[start:end+1]
                 try:
                     result_dict = json.loads(test_str)
-                except JSONDecodeError as e:
+                except JSONDecodeError:
                     result_dict = {}
 
                 if len(result_dict) > 0:
                     dict_keys = [k for k in result_dict.keys()]
-                    if 1 == len(dict_keys):
-                        # probably got a list of the structures specified in the user prompt,
-                        # and the key is likely a plural form of a user param
+                    if 1 == len(dict_keys) and isinstance(result_dict[dict_keys[0]], list):
+                        # Checking to see if its a dictionary with a list of dicts in the sole key
+                        # of the form {"key1": [{...}]}, probably a list of the structures specified
+                        # in the user prompt, and the key is likely a plural form of a user param
                         #log('{0}'.format(result_dict))
                         for item in result_dict[dict_keys[0]]:
                             #log('{0}'.format(type(item)))
                             result_dict_list.append(item)
                     else:
-                        # should be a single user prompt structure
+                        # If response is only a single dict, should be a single user prompt structure
                         result_dict_list.append(result_dict)
                 else:
                     # multiple user prompt structures embedded in a larger string;
@@ -296,7 +292,7 @@ class OpenAITask(BaseTask):
                         # result should be a valid JSON string (i.e. a dict)
                         try:
                             result_dict = json.loads(json_str)
-                        except JSONDecodeError as e:
+                        except JSONDecodeError:
                             result_dict = {}
 
                         result_dict_list.append(result_dict)
@@ -314,7 +310,7 @@ class OpenAITask(BaseTask):
                         #           "entity" : entity,
                         #      "measurement" : measurement
                         #     }
-                        
+
                         kwargs = {}
                         params_ok = True
                         for param in validation_param_set:
@@ -343,7 +339,7 @@ class OpenAITask(BaseTask):
                             # can't validate this result since all required validation params
                             # are not available in the LLM response
                             llm_response['is_valid'] = 'None'
-                            
+
                         result_dict_list[q] = llm_response
 
                 for item in result_dict_list:
@@ -359,6 +355,6 @@ class OpenAITask(BaseTask):
                             'document' : input_text,
                             'value' : item
                         }
-                        
+
                     self.write_result_data(temp_file, mongo_client, doc, obj)
 
